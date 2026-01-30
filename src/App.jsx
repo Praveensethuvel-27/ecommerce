@@ -5,7 +5,7 @@ const App = () => {
     <>
       {/* Example usage here */}
       <div className="text-5xl text-center bg-amber-200 p-4">Hey Team!!</div>
-      <h1>Praveen</h1>
+      <h1>Hey team its another comment</h1>
     </>
   );
 };
