@@ -3,7 +3,8 @@ import React from "react";
 const App = () => {
   return (
     <>
-      <div>Hey Team!!</div>
+      {/* Example usage here */}
+      <div className="text-5xl text-center bg-amber-200 p-4">Hey Team!!</div>
     </>
   );
 };
