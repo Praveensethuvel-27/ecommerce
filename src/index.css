@@ -1,1 +1,59 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Source+Sans+3:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
 @import "tailwindcss";
+
+@theme {
+  /* Grand Ma's Care - Organic Tamil Branding */
+  --color-primary: #2D5A27;
+  --color-accent: #4A7C59;
+  --color-beige: #F5F0E8;
+  --color-brown: #6B4423;
+  --color-light-brown: #8B7355;
+  --color-white: #FAFAF8;
+  --color-muted-green: #E8F0E8;
+  --font-heading: 'Playfair Display', Georgia, serif;
+  --font-body: 'Source Sans 3', 'Nunito Sans', system-ui, sans-serif;
+  --radius: 0.75rem;
+  --radius-lg: 1rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background-color: var(--color-beige);
+  color: var(--color-brown);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+}
+
+.typing-caret {
+  position: relative;
+  white-space: nowrap;
+}
+
+.typing-caret::after {
+  content: '';
+  position: absolute;
+  right: -0.15em;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background-color: currentColor;
+  animation: caret-blink 1s step-end infinite;
+}
+
+@keyframes caret-blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  50.01%, 100% {
+    opacity: 0;
+  }
+}

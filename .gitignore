@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Secrets
+.env
+server/.env
+
+# Uploaded files (keep folders)
+server/uploads/*
+!server/uploads/.gitkeep
+!server/uploads/products/.gitkeep
