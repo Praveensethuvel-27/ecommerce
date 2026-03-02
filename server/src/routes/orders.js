@@ -12,46 +12,7 @@ function toNumber(v, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-// Normalise a raw Mongoose order doc → clean DTO for frontend
-function orderToDto(o) {
-  return {
-    id:             String(o._id),
-    orderId:        o.orderId,
-    createdAt:      o.createdAt,
-    updatedAt:      o.updatedAt,
-    customerEmail:  o.customerEmail || '',
-    customerName:   o.address?.name  || '',
-    customerPhone:  o.address?.phone || '',
-    shippingAddress: {
-      name:    o.address?.name     || '',
-      phone:   o.address?.phone    || '',
-      line1:   o.address?.address1 || '',
-      line2:   o.address?.address2 || '',
-      city:    o.address?.city     || '',
-      state:   o.address?.state    || '',
-      pincode: o.address?.pincode  || '',
-    },
-    items: (o.items || []).map((item) => ({
-      productId:   String(item.productId),
-      name:        item.productName || '',
-      weight:      item.weight      || '',
-      price:       item.price       || 0,
-      quantity:    item.quantity    || 1,
-    })),
-    subtotal:      o.subtotal      || 0,
-    shippingCost:  o.shipping      || 0,
-    total:         o.total         || 0,
-    discount:      o.discount      || 0,
-    paymentMethod: o.paymentMethod || 'cod',
-    paymentStatus: o.paymentStatus || 'paid',
-    paymentId:     o.paymentId     || '',
-    status:        o.status        || 'pending',
-    courierPartner: o.courierPartner || '',
-    awbNumber:      o.awbNumber      || '',
-  };
-}
-
-// ─── Customer: Place order ────────────────────────────────────────────────────
+// Create order (customer, requires auth)
 ordersRouter.post('/', requireAuth, async (req, res) => {
   const userId = req.user?.id;
   const customerEmail = req.user?.email;
@@ -68,9 +29,16 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
   let subtotal = 0;
 
   for (const item of cartItems) {
-    const product = await Product.findById(item.productId).lean();
+    const product = await Product.findById(item.productId);
     if (!product) {
       return res.status(400).json({ error: `Product not found: ${item.productId}` });
+    }
+
+    const qty = Math.max(1, toNumber(item.quantity, 1));
+
+    // Check sufficient stock
+    if (product.stock < qty) {
+      return res.status(400).json({ error: `Insufficient stock for ${product.name}. Available: ${product.stock}` });
     }
 
     let price = product.price;
@@ -79,152 +47,240 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
       if (wo) price = wo.price;
     }
 
-    const qty = Math.max(1, toNumber(item.quantity, 1));
     orderItems.push({
-      productId:   product._id,
+      productId: product._id,
       productName: product.name,
-      weight:      item.weight || '',
+      weight: item.weight || '',
       price,
-      quantity:    qty,
+      quantity: qty,
     });
     subtotal += price * qty;
+
+    // Deduct stock
+    product.stock = product.stock - qty;
+    await product.save();
+
+    // Emit low stock notification if stock drops below 10
+    const io = req.app.get('io');
+    if (io && product.stock < 10) {
+      io.emit('admin:low_stock', {
+        id: String(product._id),
+        name: product.name,
+        stock: product.stock,
+        message: `⚠️ Low Stock: "${product.name}" has only ${product.stock} units left!`,
+        timestamp: new Date().toISOString(),
+      });
+    }
   }
 
   const shipping = subtotal >= 999 ? 0 : 49;
-  const total    = subtotal + shipping;
-  const orderId  = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  const total = subtotal + shipping;
+
+  const orderId = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   const order = await Order.create({
     orderId,
     userId,
     customerEmail,
-    items:         orderItems,
+    items: orderItems,
     subtotal,
     shipping,
     total,
-    address:       address || {},
+    address: address || {},
     paymentMethod: req.body?.paymentMethod || 'cod',
-    status:        'pending',
+    status: 'pending',
   });
 
-  // ── Emit real-time event so admin panel instantly shows the new order ──────
+  // Emit new order notification to admin
   const io = req.app.get('io');
   if (io) {
-    io.emit('orders:new', orderToDto(order));
+    io.emit('admin:new_order', {
+      orderId: order.orderId,
+      customer: customerEmail,
+      total: order.total,
+      message: `🛒 New Order: ${order.orderId} from ${customerEmail} — ₹${order.total}`,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   return res.status(201).json({
-    id:      order._id,
+    id: order._id,
     orderId: order.orderId,
-    total:   order.total,
-    status:  order.status,
+    total: order.total,
+    status: order.status,
   });
 });
 
-// ─── Customer: My orders ──────────────────────────────────────────────────────
+// Customer: list my orders (must be before GET /)
 ordersRouter.get('/my', requireAuth, async (req, res) => {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-  const orders = await Order.find({ userId }).sort({ createdAt: -1 }).lean();
+  const orders = await Order.find({ userId })
+    .sort({ createdAt: -1 })
+    .lean();
 
   const dtos = orders.map((o) => ({
-    id:      String(o._id),
+    id: String(o._id),
     orderId: o.orderId,
-    date:    o.createdAt,
-    items:   o.items.map((i) => `${i.productName}${i.weight ? ` (${i.weight})` : ''} x${i.quantity}`).join(', '),
-    total:   o.total,
-    status:  o.status,
+    date: o.createdAt,
+    items: o.items.map((i) => `${i.productName}${i.weight ? ` (${i.weight})` : ''} x${i.quantity}`).join(', '),
+    total: o.total,
+    status: o.status,
   }));
 
   return res.json(dtos);
 });
 
-// ─── Admin: List all orders (full detail) ─────────────────────────────────────
+// Admin: list all orders
 ordersRouter.get('/', requireAuth, requireAdmin, async (req, res) => {
-  try {
-    const { status, page = 1, limit = 50 } = req.query;
+  // Support optional status filter and pagination
+  const { status, page = 1, limit = 20 } = req.query;
+  const filter = status && status !== 'all' ? { status } : {};
+  const skip = (Number(page) - 1) * Number(limit);
+  const total = await Order.countDocuments(filter);
 
-    const filter = {};
-    if (status && status !== 'all') filter.status = status;
+  const orders = await Order.find(filter)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(Number(limit))
+    .populate('userId', 'email')
+    .lean();
 
-    const skip = (Number(page) - 1) * Number(limit);
-
-    const [orders, total] = await Promise.all([
-      Order.find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .lean(),
-      Order.countDocuments(filter),
-    ]);
-
-    return res.json({
-      orders: orders.map(orderToDto),
-      pagination: {
-        total,
-        page:  Number(page),
-        limit: Number(limit),
-        pages: Math.ceil(total / Number(limit)),
+  const dtos = orders.map((o) => {
+    const addr = o.address || {};
+    return {
+      id: String(o._id),
+      orderId: o.orderId,
+      customerEmail: o.customerEmail,
+      customerName: addr.name || '',
+      customerPhone: addr.phone || '',
+      shippingAddress: {
+        name: addr.name || '',
+        phone: addr.phone || '',
+        line1: addr.address1 || '',
+        line2: addr.address2 || '',
+        city: addr.city || '',
+        state: addr.state || '',
+        pincode: addr.pincode || '',
       },
-    });
-  } catch (err) {
-    console.error('[GET /api/orders]', err);
-    return res.status(500).json({ error: err.message || 'Server error' });
-  }
+      items: o.items.map((i) => ({
+        productId: String(i.productId),
+        name: i.productName,
+        weight: i.weight || '',
+        price: i.price,
+        quantity: i.quantity,
+      })),
+      subtotal: o.subtotal,
+      shippingCost: o.shipping,
+      total: o.total,
+      paymentMethod: o.paymentMethod,
+      status: o.status,
+      rejectionReason: o.rejectionReason || '',
+      assignedDriverId: o.assignedDriverId ? String(o.assignedDriverId) : null,
+      assignedDriverName: o.assignedDriverName || '',
+      assignedDriverPhone: o.assignedDriverPhone || '',
+      createdAt: o.createdAt,
+    };
+  });
+
+  return res.json({
+    orders: dtos,
+    pagination: {
+      page: Number(page),
+      pages: Math.ceil(total / Number(limit)),
+      total,
+    },
+  });
 });
 
-// ─── Admin: Update order status ───────────────────────────────────────────────
-// When admin sets status to 'confirmed', the frontend will auto-generate
-// the shipping label + invoice PDF (this happens client-side in AdminOrders.jsx)
+// Admin: update order status
 ordersRouter.patch('/:id/status', requireAuth, requireAdmin, async (req, res) => {
-  try {
-    const { status } = req.body;
-    const validStatuses = ['pending', 'confirmed', 'shipped', 'delivered'];
-
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ error: `Invalid status. Allowed: ${validStatuses.join(', ')}` });
-    }
-
-    const order = await Order.findByIdAndUpdate(
-      req.params.id,
-      { status, updatedAt: new Date() },
-      { new: true, lean: true }
-    );
-
-    if (!order) return res.status(404).json({ error: 'Order not found' });
-
-    const dto = orderToDto(order);
-
-    const io = req.app.get('io');
-    if (io) {
-      // Notify all admin tabs
-      io.emit('orders:updated', dto);
-
-      // Notify the specific customer when their order is confirmed
-      if (status === 'confirmed') {
-        io.to('user:' + String(order.userId)).emit('orders:confirmed', {
-          orderId:      order.orderId,
-          customerName: order.address?.name || '',
-          total:        order.total,
-          status:       'confirmed',
-        });
-      }
-    }
-
-    return res.json(dto);
-  } catch (err) {
-    console.error('[PATCH /api/orders/:id/status]', err);
-    return res.status(500).json({ error: err.message || 'Server error' });
+  const { id } = req.params;
+  const { status } = req.body || {};
+  const validStatuses = ['pending', 'confirmed', 'shipped', 'delivered', 'rejected'];
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
   }
+  const order = await Order.findByIdAndUpdate(id, { status }, { new: true });
+  if (!order) return res.status(404).json({ error: 'Not found' });
+
+  // Emit socket update for real-time sync across admin tabs
+  const io = req.app.get('io');
+  if (io) {
+    io.emit('orders:updated', { id: String(order._id), status: order.status });
+  }
+
+  return res.json({ ok: true, status: order.status });
 });
 
-// ─── Admin: Product sales data ────────────────────────────────────────────────
+// Admin: reject order with reason (restores stock)
+ordersRouter.patch('/:id/reject', requireAuth, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { reason } = req.body || {};
+
+  if (!reason || !reason.trim()) {
+    return res.status(400).json({ error: 'Rejection reason is required' });
+  }
+
+  const order = await Order.findById(id);
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+
+  if (order.status === 'rejected') {
+    return res.status(400).json({ error: 'Order is already rejected' });
+  }
+
+  // Restore stock for each item
+  for (const item of order.items) {
+    await Product.findByIdAndUpdate(item.productId, {
+      $inc: { stock: item.quantity },
+    });
+  }
+
+  order.status = 'rejected';
+  order.rejectionReason = reason.trim();
+  await order.save();
+
+  // Emit socket events
+  const io = req.app.get('io');
+  if (io) {
+    // Notify all admin tabs
+    io.emit('orders:updated', {
+      id: String(order._id),
+      status: 'rejected',
+      rejectionReason: reason.trim(),
+    });
+
+    // Notify the customer (their personal room)
+    io.to(`user:${String(order.userId)}`).emit('orders:rejected', {
+      orderId: order.orderId,
+      reason: reason.trim(),
+      message: `Your order ${order.orderId} was rejected. Reason: ${reason.trim()}`,
+    });
+
+    // Admin notification for the notifications page
+    io.emit('admin:order_rejected', {
+      type: 'order_rejected',
+      orderId: order.orderId,
+      customerEmail: order.customerEmail,
+      reason: reason.trim(),
+      total: order.total,
+      message: `❌ Order ${order.orderId} rejected — Reason: ${reason.trim()}`,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  return res.json({ ok: true, orderId: order.orderId, status: 'rejected', reason: reason.trim() });
+});
+
+// Admin: product sales data (for per-product report)
 ordersRouter.get('/product/:productId/sales', requireAuth, requireAdmin, async (req, res) => {
   const { productId } = req.params;
   const orders = await Order.find({
     'items.productId': new mongoose.Types.ObjectId(productId),
-  }).sort({ createdAt: -1 }).lean();
+  })
+    .sort({ createdAt: -1 })
+    .lean();
 
   let totalQty = 0;
   let totalRevenue = 0;
@@ -233,7 +289,7 @@ ordersRouter.get('/product/:productId/sales', requireAuth, requireAdmin, async (
   for (const order of orders) {
     for (const item of order.items) {
       if (String(item.productId) === productId) {
-        totalQty     += item.quantity;
+        totalQty += item.quantity;
         totalRevenue += item.price * item.quantity;
         const w = item.weight || 'Default';
         byWeight[w] = (byWeight[w] || 0) + item.quantity;

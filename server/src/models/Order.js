@@ -27,7 +27,17 @@ const orderSchema = new mongoose.Schema(
       pincode: String,
     },
     paymentMethod: { type: String, default: 'cod' },
-    status: { type: String, enum: ['pending', 'confirmed', 'shipped', 'delivered'], default: 'pending' },
+    status: {
+      type: String,
+      enum: ['pending', 'confirmed', 'shipped', 'delivered', 'rejected'],
+      default: 'pending',
+    },
+    rejectionReason: { type: String, default: '' },
+    // Driver assignment fields
+    assignedDriverId: { type: mongoose.Schema.Types.ObjectId, ref: 'Driver', default: null },
+    assignedDriverName: { type: String, default: '' },
+    assignedDriverPhone: { type: String, default: '' },
+    shippedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

@@ -11,12 +11,43 @@ function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem('grandmascare_token') || '');
 
   const login = async (email, password) => {
-    const { token: t, user: u } = await apiLogin(email, password);
-    setUser(u);
-    setToken(t);
-    localStorage.setItem('grandmascare_user', JSON.stringify(u));
-    localStorage.setItem('grandmascare_token', t);
-    return { token: t, user: u };
+    // First try normal user/admin login
+    try {
+      const { token: t, user: u } = await apiLogin(email, password);
+      setUser(u);
+      setToken(t);
+      localStorage.setItem('grandmascare_user', JSON.stringify(u));
+      localStorage.setItem('grandmascare_token', t);
+      return { token: t, user: u };
+    } catch (userErr) {
+      // If user login fails, try driver login
+      try {
+        const res = await fetch('http://localhost:4000/api/driver/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Invalid credentials');
+
+        const driverUser = {
+          id: data.driver.id,
+          name: data.driver.name,
+          email: data.driver.email,
+          phone: data.driver.phone,
+          role: 'driver',
+        };
+
+        setUser(driverUser);
+        setToken(data.token);
+        localStorage.setItem('grandmascare_user', JSON.stringify(driverUser));
+        localStorage.setItem('grandmascare_token', data.token);
+        return { token: data.token, user: driverUser };
+      } catch {
+        // Both failed — throw original error
+        throw userErr;
+      }
+    }
   };
 
   const register = async (name, email, phone, password) => {

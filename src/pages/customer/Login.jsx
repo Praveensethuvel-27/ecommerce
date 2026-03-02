@@ -26,8 +26,11 @@ function Login() {
     try {
       const { user } = await login(email, password);
       const from = location.state?.from;
+
       if (user.role === 'admin') {
         navigate(from || '/admin');
+      } else if (user.role === 'driver') {
+        navigate('/driver/scan');
       } else {
         navigate(from || '/');
       }

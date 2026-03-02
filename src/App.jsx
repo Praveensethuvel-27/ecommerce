@@ -34,6 +34,10 @@ import AdminCategories from './pages/admin/AdminCategories';
 import AdminReports from './pages/admin/AdminReports';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminLogin from './pages/admin/AdminLogin';
+import AdminNotifications from './pages/admin/AdminNotifications';
+import AdminDrivers from './pages/admin/AdminDrivers';
+import DriverLogin from './pages/driver/DriverLogin';
+import DriverApp from './pages/driver/DriverApp';
 
 function ProtectedRoute({ children, requireAdmin = false }) {
   const { user } = useAuth();
@@ -52,6 +56,11 @@ function App() {
         <CartProvider>
           <Routes>
             <Route path="/admin/login" element={<AdminLogin />} />
+
+            {/* Driver portal — standalone, no admin/customer layout */}
+            <Route path="/driver/login" element={<DriverLogin />} />
+            <Route path="/driver/scan" element={<DriverApp />} />
+
             <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminLayout /></ProtectedRoute>}>
               <Route index element={<AdminDashboard />} />
               <Route path="products" element={<AdminProducts />} />
@@ -59,8 +68,10 @@ function App() {
               <Route path="customers" element={<AdminCustomers />} />
               <Route path="customers/blocked" element={<AdminBlockedUsers />} />
               <Route path="categories" element={<AdminCategories />} />
+              <Route path="drivers" element={<AdminDrivers />} />
               <Route path="reports" element={<AdminReports />} />
               <Route path="settings" element={<AdminSettings />} />
+              <Route path="notifications" element={<AdminNotifications />} />
             </Route>
 
             <Route path="/" element={<MainLayout />}>

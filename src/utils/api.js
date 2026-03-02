@@ -111,6 +111,18 @@ export async function updateOrderStatus(orderId, status) {
   });
 }
 
+// Admin: reject an order with a reason (also restores stock)
+export async function rejectOrder(orderId, reason) {
+  return request(`/api/orders/${encodeURIComponent(orderId)}/reject`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getToken()}`,
+    },
+    body: JSON.stringify({ reason }),
+  });
+}
+
 export async function getCustomers() {
   return request('/api/customers', {
     headers: { Authorization: `Bearer ${getToken()}` },
@@ -138,5 +150,37 @@ export async function unblockCustomer(id) {
   return request(`/api/customers/${encodeURIComponent(id)}/unblock`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${getToken()}` },
+  });
+}
+// ─── Driver API ───────────────────────────────────────────────────────────────
+
+// Admin: list all drivers
+export async function listDrivers() {
+  return request('/api/driver/list', {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+}
+
+// Admin: assign a driver to a confirmed order
+export async function assignDriver(orderId, driverId) {
+  return request(`/api/driver/assign/${encodeURIComponent(orderId)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getToken()}`,
+    },
+    body: JSON.stringify({ driverId }),
+  });
+}
+
+// Admin: create a new driver account
+export async function createDriver(data) {
+  return request('/api/driver/create', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getToken()}`,
+    },
+    body: JSON.stringify(data),
   });
 }

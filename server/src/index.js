@@ -8,7 +8,7 @@ import { verifyAccessToken } from './utils/jwt.js';
 
 async function main() {
   await connectDb();
-  await ensureSeedAdmin();
+  //await ensureSeedAdmin();//
   const app = createApp();
   const httpServer = createServer(app);
 

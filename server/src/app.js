@@ -8,6 +8,7 @@ import { uploadsRouter } from './routes/uploads.js';
 import { productsRouter } from './routes/products.js';
 import { ordersRouter } from './routes/orders.js';
 import { customersRouter } from './routes/customers.js';
+import { driverRouter } from './routes/driver.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,7 +19,6 @@ export function createApp() {
   app.use(cors({ origin: env.clientOrigin, credentials: true }));
   app.use(express.json({ limit: '1mb' }));
 
-  // Static uploads: store paths like `/uploads/products/<file>`
   const uploadsDir = path.resolve(__dirname, '../uploads');
   app.use('/uploads', express.static(uploadsDir));
 
@@ -31,8 +31,8 @@ export function createApp() {
   app.use('/api/products', productsRouter);
   app.use('/api/orders', ordersRouter);
   app.use('/api/customers', customersRouter);
+  app.use('/api/driver', driverRouter);
 
-  // Basic error handler (including multer errors)
   // eslint-disable-next-line no-unused-vars
   app.use((err, _req, res, _next) => {
     const message = err?.message || 'Server error';
@@ -41,4 +41,3 @@ export function createApp() {
 
   return app;
 }
-

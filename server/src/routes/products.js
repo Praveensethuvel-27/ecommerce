@@ -17,7 +17,7 @@ function toBool(v, fallback = false) {
   if (v === undefined || v === null || v === '') return fallback;
   if (typeof v === 'boolean') return v;
   const s = String(v).toLowerCase();
-  return s === 'true' || s === '1' || s === 'yes' || s === 'on';
+  return ['true', '1', 'yes', 'on'].includes(s);
 }
 
 function parseWeightOptions(val) {
@@ -32,7 +32,8 @@ function parseWeightOptions(val) {
         price: toNumber(x.price, 0),
       }))
       .filter((x) => x.price >= 0);
-  } catch {
+  } catch (err) {
+    console.error("Weight Parse Error:", err);
     return [];
   }
 }
@@ -43,118 +44,147 @@ async function uniqueSlugFromName(name, excludeId) {
 
   const existsQuery = { slug: base };
   if (excludeId) existsQuery._id = { $ne: excludeId };
+
   const exists = await Product.exists(existsQuery);
   if (!exists) return base;
 
-  // Append a short suffix if base is taken
-  const suffix = Math.random().toString(36).slice(2, 6);
-  const candidate = `${base}-${suffix}`;
-  const exists2Query = { slug: candidate };
-  if (excludeId) exists2Query._id = { $ne: excludeId };
-  const exists2 = await Product.exists(exists2Query);
-  return exists2 ? `${candidate}-${Date.now()}` : candidate;
+  return `${base}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
-// Public: list products
+/* ===============================
+   PUBLIC ROUTES
+================================= */
+
+// GET all products
 productsRouter.get('/', async (_req, res) => {
-  const docs = await Product.find({}).sort({ createdAt: -1 }).lean();
-  const dtos = docs.map(toProductDto).filter(Boolean);
-  return res.json(dtos);
+  try {
+    const docs = await Product.find({}).sort({ createdAt: -1 }).lean();
+    const dtos = docs.map(toProductDto).filter(Boolean);
+    res.json(dtos);
+  } catch (error) {
+    console.error("GET /products ERROR:", error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
-// Public: product detail by slug
+// GET product by slug
 productsRouter.get('/:slug', async (req, res) => {
-  const doc = await Product.findOne({ slug: req.params.slug }).lean();
-  if (!doc) return res.status(404).json({ error: 'Not found' });
-  return res.json(toProductDto(doc));
+  try {
+    const doc = await Product.findOne({ slug: req.params.slug }).lean();
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    res.json(toProductDto(doc));
+  } catch (error) {
+    console.error("GET /products/:slug ERROR:", error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
-// Admin: create product (multipart/form-data supported, optional `image` file)
+/* ===============================
+   ADMIN ROUTES
+================================= */
+
+// CREATE product
 productsRouter.post(
   '/',
   requireAuth,
   requireAdmin,
   uploadProductImage.single('image'),
   async (req, res) => {
-    const { name, description, categoryId } = req.body || {};
-    if (!name || !description || !categoryId) {
-      return res.status(400).json({ error: 'name, description, categoryId are required' });
+    try {
+      const { name, description, categoryId } = req.body || {};
+      if (!name || !description || !categoryId) {
+        return res.status(400).json({ error: 'name, description, categoryId required' });
+      }
+
+      const slug = await uniqueSlugFromName(name);
+      const imageUrl = req.file ? `/uploads/products/${req.file.filename}` : undefined;
+
+      const weightOptions = parseWeightOptions(req.body?.weightOptions);
+      if (!weightOptions.length) {
+        return res.status(400).json({ error: 'At least one weight option required' });
+      }
+
+      const product = await Product.create({
+        name: name.trim(),
+        slug,
+        categoryId: categoryId.trim(),
+        price: weightOptions[0].price,
+        originalPrice: toNumber(req.body?.originalPrice),
+        description,
+        stock: toNumber(req.body?.stock, 0),
+        featured: toBool(req.body?.featured, false),
+        images: imageUrl ? [imageUrl] : [],
+        weightOptions,
+      });
+
+      req.app.get('io')?.emit('products:changed', { type: 'created' });
+
+      res.status(201).json(toProductDto(product));
+    } catch (error) {
+      console.error("POST /products ERROR:", error);
+      res.status(500).json({ error: error.message });
     }
-
-    const slug = await uniqueSlugFromName(name);
-    const imageUrl = req.file ? `/uploads/products/${req.file.filename}` : undefined;
-
-    const weightOptions = parseWeightOptions(req.body?.weightOptions);
-    if (!weightOptions.length) {
-      return res.status(400).json({ error: 'At least one weight option (weight + price) is required' });
-    }
-    const price = weightOptions[0].price;
-
-    const product = await Product.create({
-      name: String(name).trim(),
-      slug,
-      categoryId: String(categoryId).trim(),
-      price,
-      originalPrice: toNumber(req.body?.originalPrice),
-      description: String(description),
-      stock: toNumber(req.body?.stock, 0),
-      featured: toBool(req.body?.featured, false),
-      images: imageUrl ? [imageUrl] : [],
-      weightOptions,
-    });
-
-    req.app.get('io')?.emit('products:changed', { type: 'created', id: String(product._id) });
-    return res.status(201).json(toProductDto(product));
   }
 );
 
-// Admin: update product (multipart/form-data supported, optional `image` file)
+// UPDATE product
 productsRouter.put(
   '/:id',
   requireAuth,
   requireAdmin,
   uploadProductImage.single('image'),
   async (req, res) => {
-    const { id } = req.params;
-    const existing = await Product.findById(id);
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    try {
+      const existing = await Product.findById(req.params.id);
+      if (!existing) return res.status(404).json({ error: 'Not found' });
 
-    const patch = {};
-    if (req.body?.name !== undefined && req.body?.name !== '') {
-      patch.name = String(req.body.name).trim();
-      patch.slug = await uniqueSlugFromName(patch.name, existing._id);
-    }
-    if (req.body?.description !== undefined) patch.description = String(req.body.description);
-    if (req.body?.categoryId !== undefined && req.body?.categoryId !== '') patch.categoryId = String(req.body.categoryId).trim();
-    if (req.body?.originalPrice !== undefined) patch.originalPrice = toNumber(req.body.originalPrice);
-    if (req.body?.stock !== undefined) patch.stock = toNumber(req.body.stock, existing.stock);
-    if (req.body?.featured !== undefined) patch.featured = toBool(req.body.featured, existing.featured);
-    if (req.body?.weightOptions !== undefined) {
-      const weightOptions = parseWeightOptions(req.body.weightOptions);
-      if (weightOptions.length === 0) {
-        return res.status(400).json({ error: 'At least one weight option (weight + price) is required' });
+      const patch = {};
+      if (req.body?.name) {
+        patch.name = req.body.name.trim();
+        patch.slug = await uniqueSlugFromName(patch.name, existing._id);
       }
-      patch.weightOptions = weightOptions;
-      patch.price = weightOptions[0].price;
-    }
 
-    if (req.file) {
-      const imageUrl = `/uploads/products/${req.file.filename}`;
-      patch.images = [imageUrl];
-    }
+      if (req.body?.description) patch.description = req.body.description;
+      if (req.body?.categoryId) patch.categoryId = req.body.categoryId.trim();
+      if (req.body?.stock !== undefined) patch.stock = toNumber(req.body.stock);
+      if (req.body?.featured !== undefined) patch.featured = toBool(req.body.featured);
 
-    const updated = await Product.findByIdAndUpdate(id, patch, { new: true });
-    req.app.get('io')?.emit('products:changed', { type: 'updated', id: String(updated?._id || id) });
-    return res.json(toProductDto(updated));
+      if (req.body?.weightOptions) {
+        const weightOptions = parseWeightOptions(req.body.weightOptions);
+        if (!weightOptions.length) {
+          return res.status(400).json({ error: 'At least one weight option required' });
+        }
+        patch.weightOptions = weightOptions;
+        patch.price = weightOptions[0].price;
+      }
+
+      if (req.file) {
+        patch.images = [`/uploads/products/${req.file.filename}`];
+      }
+
+      const updated = await Product.findByIdAndUpdate(req.params.id, patch, { new: true });
+
+      req.app.get('io')?.emit('products:changed', { type: 'updated' });
+
+      res.json(toProductDto(updated));
+    } catch (error) {
+      console.error("PUT /products ERROR:", error);
+      res.status(500).json({ error: error.message });
+    }
   }
 );
 
-// Admin: delete product
+// DELETE product
 productsRouter.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
-  const { id } = req.params;
-  const deleted = await Product.findByIdAndDelete(id);
-  if (!deleted) return res.status(404).json({ error: 'Not found' });
-  req.app.get('io')?.emit('products:changed', { type: 'deleted', id });
-  return res.json({ ok: true });
-});
+  try {
+    const deleted = await Product.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ error: 'Not found' });
 
+    req.app.get('io')?.emit('products:changed', { type: 'deleted' });
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("DELETE /products ERROR:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
