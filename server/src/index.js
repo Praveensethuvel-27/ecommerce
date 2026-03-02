@@ -3,15 +3,15 @@ import { createApp } from './app.js';
 import { createServer } from 'node:http';
 import { connectDb } from './config/db.js';
 import { env } from './config/env.js';
-import { ensureSeedAdmin } from './seed/ensureAdmin.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { verifyAccessToken } from './utils/jwt.js';
 import path from 'path';
 
 async function main() {
+  // Connect to MongoDB
   await connectDb();
-  //await ensureSeedAdmin();
 
+  // Create Express app
   const app = createApp();
   const httpServer = createServer(app);
 
@@ -29,16 +29,17 @@ async function main() {
         const userId = decoded.sub;
         if (userId) socket.join(`user:${userId}`);
       } catch {
-        // Invalid token — anonymous socket
+        // Invalid token — socket works as anonymous
       }
     }
   });
 
   // ── Serve React frontend ────────────────────────
-  const distPath = path.resolve('../dist');
+  // Your dist folder is at the project root: grandmascare/dist
+  const distPath = path.resolve('../../dist'); // server/src -> ../../dist
   app.use(express.static(distPath));
 
-  // For SPA routing (React Router)
+  // SPA routing: any unknown route returns index.html
   app.get('*', (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
