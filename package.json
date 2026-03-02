@@ -9,7 +9,8 @@
     "dev:all": "concurrently -k \"npm run dev\" \"npm run dev:server\"",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node server/src/index.js"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.18",
