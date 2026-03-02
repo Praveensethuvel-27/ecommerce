@@ -6,6 +6,10 @@ import { env } from './config/env.js';
 import { Server as SocketIOServer } from 'socket.io';
 import { verifyAccessToken } from './utils/jwt.js';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 async function main() {
   // Connect to MongoDB
@@ -34,18 +38,24 @@ async function main() {
     }
   });
 
-  // ── Serve React frontend ────────────────────────
-  // Your dist folder is at the project root: grandmascare/dist
-  const distPath = path.resolve('../../dist'); // server/src -> ../../dist
-  app.use(express.static(distPath));
+  // ── React frontend serving ───────────────────────
+  if (process.env.NODE_ENV === 'production') {
+    // Production: serve React build from dist/
+    const distPath = path.join(__dirname, '../../dist');
+    console.log('Serving React from:', distPath);
+    app.use(express.static(distPath));
 
-  // SPA routing: any unknown route returns index.html
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
-  });
+    // SPA routing: all unknown routes return index.html
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  } else {
+    // Development: React runs on Vite dev server (http://localhost:5173)
+    console.log('Development mode: React app runs on Vite dev server');
+  }
 
   // ── Start server ───────────────────────────────
-  const PORT = process.env.PORT || env.port || 4000;
+  const PORT = env.port || 4000;
   httpServer.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
