@@ -4,6 +4,8 @@ import { Product } from '../models/Product.js';
 import { requireAdmin, requireAuth } from '../middleware/auth.js';
 import { uploadProductImage } from '../middleware/upload.js';
 import { toProductDto } from '../utils/productDto.js';
+import { uploadToCloudinary } from '../utils/cloudinary.js';
+import { env } from '../config/env.js';
 
 export const productsRouter = express.Router();
 
@@ -97,7 +99,16 @@ productsRouter.post(
       }
 
       const slug = await uniqueSlugFromName(name);
-      const imageUrl = req.file ? `/uploads/products/${req.file.filename}` : undefined;
+      let imageUrl;
+      if (req.file) {
+        if (env.cloudinaryCloudName) {
+          imageUrl = await uploadToCloudinary(req.file.buffer);
+        } else {
+          // fallback for local dev: save to disk
+          const { writeFileToDisk } = await import('../utils/localUpload.js');
+          imageUrl = await writeFileToDisk(req.file);
+        }
+      }
 
       const weightOptions = parseWeightOptions(req.body?.weightOptions);
       if (!weightOptions.length) {
@@ -159,7 +170,12 @@ productsRouter.put(
       }
 
       if (req.file) {
-        patch.images = [`/uploads/products/${req.file.filename}`];
+        if (env.cloudinaryCloudName) {
+          patch.images = [await uploadToCloudinary(req.file.buffer)];
+        } else {
+          const { writeFileToDisk } = await import('../utils/localUpload.js');
+          patch.images = [await writeFileToDisk(req.file)];
+        }
       }
 
       const updated = await Product.findByIdAndUpdate(req.params.id, patch, { new: true });
