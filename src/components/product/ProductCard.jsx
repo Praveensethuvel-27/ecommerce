@@ -6,27 +6,6 @@ import Badge from '../common/Badge';
 function ProductCard({ product }) {
   const { t } = useLanguage();
   const hasDiscount = product.originalPrice && product.originalPrice > product.price;
-  
-  // Get translated product name
-  const getProductName = () => {
-    const productKeyMap = {
-      'nalangu-maavu': 'product.nalanguMaavu',
-      'kasturi-manjal': 'product.kasturiManjal',
-      'payatham-maavu': 'product.payathamMaavu',
-      'kadalai-maavu': 'product.kadalaiMaavu',
-      'kambu-maavu': 'product.kambuMaavu',
-      'karuppu-kavuni-kanji-mix': 'product.karuppuKavuniKanji',
-      'weight-loss-mix': 'product.weightLossMix',
-      'weightlossmix-image': 'product.weightLossMix',
-      'karuppu-ulundu-kali-mix': 'product.karuppuUlunduKali',
-      'idli-podi': 'product.idliPodi',
-      'milagai-thool': 'product.milagaiThool',
-      'green-gram-flour-image': 'product.greenGramFlour',
-      'kasturi-manjal-image': 'product.kasturiManjal',
-    };
-    const key = productKeyMap[product.slug];
-    return key ? t(key) : product.name;
-  };
 
   return (
     <Link
@@ -53,7 +32,7 @@ function ProductCard({ product }) {
       </div>
       <div className="p-4">
         <h3 className="font-semibold text-[#6B4423] group-hover:text-[#2D5A27] transition-colors line-clamp-2">
-          {getProductName()}
+          {product.name}
         </h3>
         <div className="mt-2 flex items-center gap-2">
           <span className="text-lg font-bold text-[#2D5A27]">
