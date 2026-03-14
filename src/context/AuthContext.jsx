@@ -1,6 +1,8 @@
 import { createContext, useContext, useState } from 'react';
 import { login as apiLogin, register as apiRegister } from '../utils/api';
 
+const API_BASE = import.meta.env.VITE_API_BASE || '';
+
 const AuthContext = createContext(null);
 
 function AuthProvider({ children }) {
@@ -11,7 +13,6 @@ function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem('grandmascare_token') || '');
 
   const login = async (email, password) => {
-    // First try normal user/admin login
     try {
       const { token: t, user: u } = await apiLogin(email, password);
       setUser(u);
@@ -20,16 +21,14 @@ function AuthProvider({ children }) {
       localStorage.setItem('grandmascare_token', t);
       return { token: t, user: u };
     } catch (userErr) {
-      // If user login fails, try driver login
       try {
-        const res = await fetch('http://localhost:4000/api/driver/login', {
+        const res = await fetch(`${API_BASE}/api/driver/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Invalid credentials');
-
         const driverUser = {
           id: data.driver.id,
           name: data.driver.name,
@@ -37,14 +36,12 @@ function AuthProvider({ children }) {
           phone: data.driver.phone,
           role: 'driver',
         };
-
         setUser(driverUser);
         setToken(data.token);
         localStorage.setItem('grandmascare_user', JSON.stringify(driverUser));
         localStorage.setItem('grandmascare_token', data.token);
         return { token: data.token, user: driverUser };
       } catch {
-        // Both failed — throw original error
         throw userErr;
       }
     }
