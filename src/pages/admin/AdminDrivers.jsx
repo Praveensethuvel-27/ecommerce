@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Truck, Plus, X, Eye, EyeOff, CheckCircle, XCircle, Phone, Mail, User } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
-const API = 'http://localhost:4000/api/driver';
+const API = `${import.meta.env.VITE_API_BASE || ''}/api/driver`;
 
 function AdminDrivers() {
   const { token } = useAuth();
@@ -77,7 +77,6 @@ function AdminDrivers() {
   };
 
   const toggleActive = async (driver) => {
-    // Optimistic UI update
     setDrivers(prev =>
       prev.map(d => d.id === driver.id ? { ...d, active: !d.active } : d)
     );
@@ -91,7 +90,6 @@ function AdminDrivers() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      {/* Toast */}
       {toast && (
         <div className={`fixed top-6 right-6 z-50 px-5 py-3 rounded-xl shadow-lg text-white text-sm font-medium transition-all
           ${toast.type === 'error' ? 'bg-red-500' : 'bg-[#2D5A27]'}`}>
@@ -99,7 +97,6 @@ function AdminDrivers() {
         </div>
       )}
 
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-[#5C3317] font-heading flex items-center gap-2">
@@ -115,7 +112,6 @@ function AdminDrivers() {
         </button>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Total Drivers</p>
@@ -131,7 +127,6 @@ function AdminDrivers() {
         </div>
       </div>
 
-      {/* Drivers Table */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center h-48 text-gray-400">Loading drivers...</div>
@@ -200,7 +195,6 @@ function AdminDrivers() {
         )}
       </div>
 
-      {/* Add Driver Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
@@ -212,7 +206,6 @@ function AdminDrivers() {
               </button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {/* Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
                 <input
@@ -225,8 +218,6 @@ function AdminDrivers() {
                 />
                 {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
               </div>
-
-              {/* Phone */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
                 <input
@@ -239,8 +230,6 @@ function AdminDrivers() {
                 />
                 {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
               </div>
-
-              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
                 <input
@@ -253,8 +242,6 @@ function AdminDrivers() {
                 />
                 {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
               </div>
-
-              {/* Password */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
                 <div className="relative">
@@ -273,8 +260,6 @@ function AdminDrivers() {
                 </div>
                 {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password}</p>}
               </div>
-
-              {/* Buttons */}
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
