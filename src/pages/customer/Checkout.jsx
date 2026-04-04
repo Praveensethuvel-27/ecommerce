@@ -10,9 +10,9 @@ import Breadcrumb from '../../components/layout/Breadcrumb';
 import { createOrder } from '../../utils/api';
 
 const paymentMethods = [
-  { id: 'cod', label: 'Cash on Delivery', icon: Banknote },
+
   { id: 'upi', label: 'UPI', icon: Smartphone },
-  { id: 'card', label: 'Card', icon: CreditCard },
+
 ];
 
 function Checkout() {
