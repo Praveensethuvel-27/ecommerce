@@ -10,9 +10,15 @@ import Breadcrumb from '../../components/layout/Breadcrumb';
 import { createOrder } from '../../utils/api';
 
 const paymentMethods = [
+<<<<<<< HEAD
 
   { id: 'upi', label: 'UPI', icon: Smartphone },
 
+=======
+ 
+  { id: 'upi', label: 'UPI', icon: Smartphone },
+ 
+>>>>>>> a53c397 (updated on admin pannel and then)
 ];
 
 function Checkout() {
