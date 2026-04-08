@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import QRCode from 'qrcode';
 import { getOrders, updateOrderStatus, rejectOrder, listDrivers, assignDriver } from '../../utils/api';
 import { subscribeOrdersNew, subscribeOrdersUpdated } from '../../utils/realtime';
 
@@ -42,23 +43,19 @@ const STATUS_META = {
   rejected:  { bg: '#FEF2F2', text: '#991B1B', dot: '#EF4444', label: 'Rejected' },
 };
 
-function drawMiniQR(doc, text, x, y, size = 28) {
-  const cells = 10;
-  const cell  = size / cells;
-  doc.setDrawColor(0); doc.setLineWidth(0.3);
-  doc.rect(x, y, size, size, 'S');
-  doc.setFillColor(0, 0, 0);
-  for (let r = 0; r < cells; r++) {
-    for (let c = 0; c < cells; c++) {
-      const v = (text.charCodeAt((r * cells + c) % text.length) + r * 7 + c * 13) % 3;
-      if (v === 0) doc.rect(x + c * cell + 1, y + r * cell + 1, cell - 1, cell - 1, 'F');
-    }
-  }
-  [[0,0],[0,7],[7,0]].forEach(([rr,cc]) => {
-    doc.setFillColor(0,0,0); doc.rect(x+cc*cell, y+rr*cell, cell*3, cell*3, 'S');
-    doc.setFillColor(255,255,255); doc.rect(x+cc*cell+cell*.5, y+rr*cell+cell*.5, cell*2, cell*2, 'F');
-    doc.setFillColor(0,0,0); doc.rect(x+cc*cell+cell, y+rr*cell+cell, cell, cell, 'F');
+async function drawMiniQR(doc, text, x, y, size = 28) {
+  const payload = String(text);
+  const qrPngDataUrl = await QRCode.toDataURL(payload, {
+    errorCorrectionLevel: 'M',
+    margin: 2,
+    width: Math.round(size * 4),
+    color: { dark: '#000000', light: '#ffffff' },
   });
+
+  // Ensure consistent white background for scannability
+  doc.setFillColor(255, 255, 255);
+  doc.rect(x, y, size, size, 'F');
+  doc.addImage(qrPngDataUrl, 'PNG', x, y, size, size);
 }
 
 function drawBarcode(doc, text, x, y, w, h) {
@@ -90,11 +87,12 @@ function numberToWords(n) {
   return conv(Math.round(n));
 }
 
-function generateInvoicePDF(order) {
+async function generateInvoicePDF(order) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pw  = 210;
   const ref = order.orderId || order.id;
   const invoiceNo = `INV-${ref.slice(-10).toUpperCase()}`;
+  const isCod = order.paymentMethod === 'cod';
 
   doc.setFillColor(43,90,39); doc.rect(0,0,pw,42,'F');
   doc.setFillColor(107,68,35); doc.rect(0,42,pw,4,'F');
@@ -109,9 +107,10 @@ function generateInvoicePDF(order) {
   doc.setFont('helvetica','bold'); doc.setFontSize(17); doc.setTextColor(255,220,100);
   doc.text('TAX INVOICE', pw-14, 15, { align:'right' });
   doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(200,240,190);
-  doc.text(`Invoice No: ${invoiceNo}`,                    pw-14, 23, { align:'right' });
-  doc.text(`Date: ${formatDate(order.createdAt)}`,        pw-14, 28, { align:'right' });
-  doc.text(`Order Ref: ${order.orderId || ref}`,          pw-14, 33, { align:'right' });
+  doc.text(`Invoice No: ${invoiceNo}`,                        pw-14, 23, { align:'right' });
+  doc.text(`Invoice Date: ${formatDate(order.createdAt)}`,    pw-14, 28, { align:'right' });
+  doc.text(`Order Ref: ${order.orderId || ref}`,              pw-14, 33, { align:'right' });
+  doc.text(`Order Status: ${(order.status || 'pending')}`,    pw-14, 38, { align:'right' });
 
   doc.setFillColor(34,197,94); doc.roundedRect(pw-58,47,46,10,2,2,'F');
   doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(255,255,255);
@@ -132,9 +131,13 @@ function generateInvoicePDF(order) {
     order.customerEmail ? `Email: ${order.customerEmail}` : '',
   ].filter(Boolean).forEach((l, i) => doc.text(l, 14, 72 + i*5));
 
-  drawMiniQR(doc, ref, pw-44, 55, 28);
+  const qrSize = 28;
+  const qrX = pw - 44;
+  const qrY = 55;
+  const trackingUrl = `${window.location.origin}/track-order?orderId=${encodeURIComponent(ref)}`;
+  await drawMiniQR(doc, trackingUrl, qrX, qrY, qrSize);
   doc.setFontSize(6); doc.setTextColor(100,100,100);
-  doc.text('Scan to track', pw-30, 86, { align:'center' });
+  doc.text('Scan to track', qrX + qrSize / 2, qrY + qrSize + 3, { align:'center' });
 
   doc.setDrawColor(200); doc.setLineWidth(0.3); doc.line(14,100,pw-14,100);
 
@@ -187,9 +190,9 @@ function generateInvoicePDF(order) {
   doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(80,80,80);
   doc.text(`Amount in words: ${numberToWords(grand)} Rupees Only`, 14, fy+10);
   doc.setFont('helvetica','normal');
-  doc.text(`Payment Mode: ${order.paymentMethod === 'cod' ? 'Cash on Delivery' : 'Online (Prepaid)'}`, 14, fy+18);
-  doc.text(`Payment Status: PAID ✓`, 14, fy+24);
-  doc.text(`Transaction Ref: ${order.paymentId || 'N/A'}`, 14, fy+30);
+  doc.text(`Payment Mode: ${isCod ? 'Cash on Delivery (COD)' : 'Online Payment'}`, 14, fy+18);
+  doc.text(`Payment Status: ${isCod ? 'Pending (to be collected)' : 'PAID ✓'}`, 14, fy+24);
+  doc.text(`Transaction Ref: ${order.paymentId || (isCod ? 'COD' : 'N/A')}`, 14, fy+30);
 
   const bcY = fy+60;
   doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(43,90,39);
@@ -206,13 +209,14 @@ function generateInvoicePDF(order) {
   doc.save(`Invoice-${invoiceNo}.pdf`);
 }
 
-function generateShippingLabel(order) {
+async function generateShippingLabel(order) {
   const doc = new jsPDF({ unit:'mm', format:'a5' });
   const pw  = 148;
   const addr   = order.shippingAddress || {};
   const ref    = order.orderId || order.id;
   const dispId = order.orderId || `#${order.id.slice(-8).toUpperCase()}`;
   const invNo  = `INV-${ref.slice(-10).toUpperCase()}`;
+  const isCod  = order.paymentMethod === 'cod';
 
   doc.setDrawColor(0); doc.setLineWidth(1);
   doc.rect(4,4,pw-8,202,'S');
@@ -221,9 +225,11 @@ function generateShippingLabel(order) {
   doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(255,255,255);
   doc.text(COMPANY.name, 10, 14);
 
-  doc.setFillColor(255,220,50); doc.roundedRect(pw-52,7,42,10,2,2,'F');
-  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(30,30,30);
-  doc.text('PREPAID', pw-31, 13.5, { align:'center' });
+  doc.setFillColor(isCod ? 250 : 255, isCod ? 200 : 220, isCod ? 200 : 50);
+  doc.roundedRect(pw-52,7,42,10,2,2,'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(9);
+  doc.setTextColor(isCod ? 153 : 30, isCod ? 27 : 30, isCod ? 27 : 30);
+  doc.text(isCod ? 'CASH ON DELIVERY' : 'PREPAID', pw-31, 13.5, { align:'center' });
 
   doc.setLineWidth(0.3); doc.setDrawColor(150);
   doc.line(4,20,pw-4,20);
@@ -258,9 +264,9 @@ function generateShippingLabel(order) {
   doc.text(`Order: ${dispId}`,                     10,       137);
   doc.text(`Invoice: ${invNo}`,                     10,       145);
   doc.text(`Date: ${formatDate(order.createdAt)}`,  10,       153);
-  doc.text(`Payment: PREPAID`,                      pw/2+4,   137);
+  doc.text(`Payment: ${isCod ? 'COD (Collect on delivery)' : 'Prepaid'}`, pw/2+4, 137);
   doc.text(`Items: ${(order.items||[]).length}`,    pw/2+4,   145);
-  doc.text(`Amt: ${formatPrice(order.total)}`,      pw/2+4,   153);
+  doc.text(`Amount: ${formatPrice(order.total)}`,   pw/2+4,   153);
 
   doc.setLineWidth(0.3); doc.line(4,160,pw-4,160);
   doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(43,90,39);
@@ -270,9 +276,13 @@ function generateShippingLabel(order) {
   doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(80,80,80);
   doc.text(`AWB: ${order.awbNumber || 'Pending Assignment'}`, 10, 182);
 
-  drawMiniQR(doc, ref, pw-38, 162, 26);
+  const qrSize = 26;
+  const qrX = pw - qrSize - 12;
+  const qrY = 162;
+  const trackingUrl = `${window.location.origin}/track-order?orderId=${encodeURIComponent(ref)}`;
+  await drawMiniQR(doc, trackingUrl, qrX, qrY, qrSize);
   doc.setFontSize(6.5); doc.setTextColor(100,100,100);
-  doc.text('Track', pw-25, 191, { align:'center' });
+  doc.text('Track', qrX + qrSize / 2, qrY + qrSize + 7, { align:'center' });
 
   doc.setFillColor(230,240,230); doc.rect(4,193,pw-8,13,'F');
   doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor(43,90,39);
@@ -589,8 +599,22 @@ function DownloadReadyBar({ order, onDismiss }) {
           </p>
           <div style={{ display:'flex', gap:10 }}>
             {[
-              { label:'Shipping Label', icon:<Package style={{ width:16, height:16, color:'#FDE68A' }} />, action:() => generateShippingLabel(order) },
-              { label:'Invoice PDF',    icon:<FileText style={{ width:16, height:16, color:'#FDE68A' }} />, action:() => generateInvoicePDF(order) },
+              {
+                label: 'Shipping Label',
+                icon: <Package style={{ width: 16, height: 16, color: '#FDE68A' }} />,
+                action: () =>
+                  generateShippingLabel(order).catch((err) => {
+                    alert(err?.message || 'Failed to generate shipping label');
+                  }),
+              },
+              {
+                label: 'Invoice PDF',
+                icon: <FileText style={{ width: 16, height: 16, color: '#FDE68A' }} />,
+                action: () =>
+                  generateInvoicePDF(order).catch((err) => {
+                    alert(err?.message || 'Failed to generate invoice');
+                  }),
+              },
             ].map(({ label, icon, action }) => (
               <button key={label} onClick={action}
                 style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8,
@@ -599,7 +623,12 @@ function DownloadReadyBar({ order, onDismiss }) {
                 {icon} {label} <ArrowDownToLine style={{ width:13, height:13, color:'#86EFAC' }} />
               </button>
             ))}
-            <button onClick={() => { generateShippingLabel(order); generateInvoicePDF(order); }}
+            <button
+              onClick={() => {
+                Promise.all([generateShippingLabel(order), generateInvoicePDF(order)]).catch((err) => {
+                  alert(err?.message || 'Failed to generate PDFs');
+                });
+              }}
               style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6,
                 padding:'11px 14px', borderRadius:'0.85rem', background:'linear-gradient(135deg,#F59E0B,#D97706)',
                 border:'none', color:'#1a1a1a', fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap',
@@ -998,16 +1027,33 @@ export default function AdminOrders() {
                         </button>
                         {order.status !== 'pending' && (
                           <>
-                            <button title="Invoice PDF" onClick={() => generateInvoicePDF(order)}
+                            <button
+                              title="Invoice PDF"
+                              onClick={() => {
+                                generateInvoicePDF(order).catch((err) => {
+                                  alert(err?.message || 'Failed to generate invoice');
+                                });
+                              }}
                               className="p-2 rounded-lg hover:bg-green-50 transition-colors" style={{ color:'#2B5A27' }}>
                               <FileText className="w-4 h-4" />
                             </button>
-                            <button title="Shipping Label" onClick={() => generateShippingLabel(order)}
+                            <button
+                              title="Shipping Label"
+                              onClick={() => {
+                                generateShippingLabel(order).catch((err) => {
+                                  alert(err?.message || 'Failed to generate shipping label');
+                                });
+                              }}
                               className="p-2 rounded-lg hover:bg-amber-50 transition-colors" style={{ color:'#6B4423' }}>
                               <Package className="w-4 h-4" />
                             </button>
-                            <button title="Download Both"
-                              onClick={() => { generateInvoicePDF(order); generateShippingLabel(order); }}
+                            <button
+                              title="Download Both"
+                              onClick={() => {
+                                Promise.all([generateInvoicePDF(order), generateShippingLabel(order)]).catch((err) => {
+                                  alert(err?.message || 'Failed to generate PDFs');
+                                });
+                              }}
                               className="p-2 rounded-lg hover:bg-gray-50 transition-colors" style={{ color:'#999' }}>
                               <Download className="w-4 h-4" />
                             </button>
