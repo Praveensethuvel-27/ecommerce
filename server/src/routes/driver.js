@@ -147,6 +147,101 @@ driverRouter.patch('/scan/:orderId', requireDriver, async (req, res) => {
   });
 });
 
+// ─── Driver: update status (shipped/delivered) ───────────────────────────────
+driverRouter.patch('/status/:orderId', requireDriver, async (req, res) => {
+  const { orderId } = req.params;
+  const { status } = req.body || {};
+  const nextStatus = String(status || '').toLowerCase();
+
+  if (!['shipped', 'delivered'].includes(nextStatus)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+
+  const order = await Order.findOne({
+    $or: [
+      { orderId: orderId },
+      ...(orderId.match(/^[a-f\d]{24}$/i) ? [{ _id: orderId }] : []),
+    ],
+    assignedDriverId: req.driver.id,
+  });
+
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found or not assigned to you' });
+  }
+
+  // Enforce allowed transitions:
+  // confirmed -> shipped -> delivered
+  if (nextStatus === 'shipped') {
+    if (order.status === 'shipped' || order.status === 'delivered') {
+      return res.status(400).json({ error: `Order already ${order.status}` });
+    }
+    if (order.status !== 'confirmed') {
+      return res.status(400).json({ error: 'Only confirmed orders can be shipped' });
+    }
+    order.status = 'shipped';
+    order.shippedAt = new Date();
+  }
+
+  if (nextStatus === 'delivered') {
+    if (order.status === 'delivered') {
+      return res.status(400).json({ error: 'Order already delivered' });
+    }
+    if (order.status !== 'shipped') {
+      return res.status(400).json({ error: 'Only shipped orders can be delivered' });
+    }
+    order.status = 'delivered';
+    order.deliveredAt = new Date();
+  }
+
+  await order.save();
+
+  const io = req.app.get('io');
+  if (io) {
+    io.emit('orders:updated', { id: String(order._id), status: order.status });
+
+    if (order.status === 'shipped') {
+      io.to(`user:${String(order.userId)}`).emit('orders:shipped', {
+        orderId: order.orderId,
+        message: `Your order ${order.orderId} is on the way!`,
+        driverName: req.driver.name,
+        driverPhone: req.driver.phone,
+      });
+      io.emit('admin:order_shipped', {
+        type: 'order_shipped',
+        orderId: order.orderId,
+        driverName: req.driver.name,
+        message: `Order ${order.orderId} picked up by ${req.driver.name}`,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (order.status === 'delivered') {
+      io.to(`user:${String(order.userId)}`).emit('orders:delivered', {
+        orderId: order.orderId,
+        message: `Your order ${order.orderId} has been delivered.`,
+      });
+      io.emit('admin:order_status', {
+        orderId: order.orderId,
+        status: 'delivered',
+        customerEmail: order.customerEmail,
+        total: order.total,
+        message: `✅ Order Delivered: ${order.orderId} — ₹${order.total}`,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  return res.json({
+    ok: true,
+    orderId: order.orderId,
+    status: order.status,
+    customerName: order.address?.name || '',
+    customerPhone: order.address?.phone || '',
+    address: [order.address?.address1, order.address?.city, order.address?.pincode]
+      .filter(Boolean).join(', '),
+  });
+});
+
 // ─── Admin: create driver account ─────────────────────────────────────────────
 driverRouter.post('/create', requireAdmin, async (req, res) => {
   const { name, phone, email, password } = req.body || {};

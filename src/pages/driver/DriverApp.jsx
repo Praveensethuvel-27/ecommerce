@@ -8,6 +8,27 @@ import { useAuth } from '../../context/AuthContext';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
+function extractOrderIdFromQr(qrDataRaw) {
+  const raw = String(qrDataRaw || '').trim();
+  if (!raw) return '';
+
+  // If QR contains a URL like /track-order?orderId=ORD-...
+  if (/^https?:\/\//i.test(raw) || raw.startsWith('/')) {
+    try {
+      const url = raw.startsWith('http') ? new URL(raw) : new URL(raw, window.location.origin);
+      const fromQuery = url.searchParams.get('orderId');
+      if (fromQuery) return String(fromQuery).trim();
+      // Fallback: sometimes payload might be /track-order/ORD-...
+      const m = url.pathname.match(/(ORD-[A-Za-z0-9-]+)/);
+      if (m?.[1]) return m[1];
+    } catch {
+      // ignore
+    }
+  }
+
+  return raw;
+}
+
 // ─── QR Scanner using jsQR via canvas ────────────────────────────────────────
 function QRScanner({ onScan, onError }) {
   const videoRef   = useRef(null);
@@ -148,6 +169,10 @@ function QRScanner({ onScan, onError }) {
 // ─── Result card ──────────────────────────────────────────────────────────────
 function ResultCard({ result, onReset }) {
   const isSuccess = result.ok;
+  const statusText =
+    String(result.status || '').toLowerCase() === 'delivered'
+      ? 'Order Delivered! ✅'
+      : 'Order Shipped! ✅';
   return (
     <div className={`rounded-2xl p-6 text-center border-2 ${
       isSuccess ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'
@@ -161,7 +186,7 @@ function ResultCard({ result, onReset }) {
       </div>
 
       <h3 className={`text-xl font-bold mb-2 ${isSuccess ? 'text-green-800' : 'text-red-800'}`}>
-        {isSuccess ? 'Order Shipped! ✅' : 'Scan Failed ❌'}
+        {isSuccess ? statusText : 'Scan Failed ❌'}
       </h3>
 
       {isSuccess ? (
@@ -191,7 +216,7 @@ function ResultCard({ result, onReset }) {
             </div>
           )}
           <div className="mt-3 px-3 py-2 rounded-xl text-xs font-semibold text-green-700 bg-green-100">
-            Status updated to SHIPPED — customer notified!
+            Status updated to {String(result.status || 'shipped').toUpperCase()} — customer notified!
           </div>
         </div>
       ) : (
@@ -207,6 +232,76 @@ function ResultCard({ result, onReset }) {
   );
 }
 
+function StatusDialog({ orderId, currentStatus, onClose, onConfirm, loading }) {
+  const cs = String(currentStatus || '').toLowerCase();
+  const canShip = cs === 'confirmed';
+  const canDeliver = cs === 'shipped';
+  const [next, setNext] = useState(canDeliver ? 'delivered' : 'shipped');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.55)' }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="px-5 py-4 flex items-center justify-between"
+          style={{ background: 'linear-gradient(135deg,#2B5A27,#3D7A38)' }}>
+          <div>
+            <p className="text-white font-bold text-base">Update Order Status</p>
+            <p className="text-green-200 text-xs mt-0.5">{orderId}</p>
+          </div>
+          <button onClick={onClose} disabled={loading}
+            className="text-white/70 hover:text-white text-2xl leading-none">✕</button>
+        </div>
+
+        <div className="p-5">
+          <div className="mb-4 text-sm text-gray-600">
+            Current status: <span className="font-bold text-gray-800">{cs || '—'}</span>
+          </div>
+
+          <div className="space-y-2">
+            <button
+              disabled={!canShip || loading}
+              onClick={() => setNext('shipped')}
+              className={`w-full px-4 py-3 rounded-xl border text-sm font-bold flex items-center justify-between transition-colors disabled:opacity-40 ${
+                next === 'shipped' ? 'bg-green-50 border-green-300 text-green-800' : 'bg-white border-gray-200 text-gray-700'
+              }`}
+            >
+              <span>🚚 Mark as Shipped</span>
+              {canShip ? <span className="text-xs text-gray-400">confirmed → shipped</span> : <span className="text-xs text-gray-400">not allowed</span>}
+            </button>
+
+            <button
+              disabled={!canDeliver || loading}
+              onClick={() => setNext('delivered')}
+              className={`w-full px-4 py-3 rounded-xl border text-sm font-bold flex items-center justify-between transition-colors disabled:opacity-40 ${
+                next === 'delivered' ? 'bg-green-50 border-green-300 text-green-800' : 'bg-white border-gray-200 text-gray-700'
+              }`}
+            >
+              <span>✅ Mark as Delivered</span>
+              {canDeliver ? <span className="text-xs text-gray-400">shipped → delivered</span> : <span className="text-xs text-gray-400">not allowed</span>}
+            </button>
+          </div>
+
+          <div className="flex gap-3 mt-5">
+            <button onClick={onClose} disabled={loading}
+              className="flex-1 py-2.5 rounded-xl border text-sm font-semibold text-gray-500"
+              style={{ borderColor: '#E5E7EB' }}>
+              Cancel
+            </button>
+            <button
+              onClick={() => onConfirm(next)}
+              disabled={loading || (next === 'shipped' ? !canShip : !canDeliver)}
+              className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-40 flex items-center justify-center gap-2"
+              style={{ background: 'linear-gradient(135deg,#2B5A27,#3D7A38)' }}
+            >
+              {loading ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Updating…</> : 'Update'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Driver App ──────────────────────────────────────────────────────────
 export default function DriverApp() {
   const navigate = useNavigate();
@@ -217,6 +312,7 @@ export default function DriverApp() {
   const [processing, setProcessing] = useState(false);
   const [assignedOrders, setAssignedOrders] = useState([]);
   const [loadingOrders, setLoadingOrders]   = useState(false);
+  const [statusDialog, setStatusDialog] = useState(null); // { orderId, currentStatus }
 
   // Check auth — must be driver
   useEffect(() => {
@@ -242,22 +338,47 @@ export default function DriverApp() {
 
   const handleScan = useCallback(async (qrData) => {
     setScanning(false);
-    setProcessing(true);
     setResult(null);
 
-    const orderId = qrData.trim();
-
     try {
-      const res  = await fetch(`${API_BASE}/api/driver/scan/${encodeURIComponent(orderId)}`, {
-        method:  'PATCH',
-        headers: { Authorization: `Bearer ${token}` },
+      const orderId = extractOrderIdFromQr(qrData);
+      if (!orderId) throw new Error('Invalid QR payload');
+
+      // Use local list to determine current status; otherwise refresh list once.
+      let current = assignedOrders.find((o) => o.orderId === orderId || o.id === orderId);
+      if (!current) {
+        await loadOrders();
+        current = assignedOrders.find((o) => o.orderId === orderId || o.id === orderId);
+      }
+      // If still not found, allow backend to validate assignment on update call.
+      const currentStatus = current?.status || 'confirmed';
+      setStatusDialog({ orderId, currentStatus });
+    } catch (err) {
+      setResult({ ok: false, error: err.message });
+    } finally {
+      // no-op
+    }
+  }, [assignedOrders, token]);
+
+  const applyDriverStatus = useCallback(async (orderId, nextStatus) => {
+    setProcessing(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/driver/status/${encodeURIComponent(orderId)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: nextStatus }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Scan failed');
+      if (!res.ok) throw new Error(data?.error || 'Update failed');
       setResult({ ok: true, ...data });
+      setStatusDialog(null);
       loadOrders();
     } catch (err) {
       setResult({ ok: false, error: err.message });
+      setStatusDialog(null);
     } finally {
       setProcessing(false);
     }
@@ -306,6 +427,16 @@ export default function DriverApp() {
 
         {result && !scanning && (
           <ResultCard result={result} onReset={() => { setResult(null); setScanning(true); }} />
+        )}
+
+        {statusDialog && (
+          <StatusDialog
+            orderId={statusDialog.orderId}
+            currentStatus={statusDialog.currentStatus}
+            loading={processing}
+            onClose={() => setStatusDialog(null)}
+            onConfirm={(next) => applyDriverStatus(statusDialog.orderId, next)}
+          />
         )}
 
         {!result && (
