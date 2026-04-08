@@ -4,7 +4,7 @@ import { BarChart, Bar } from 'recharts';
 import StatsCard from '../../components/admin/StatsCard';
 import { Package, DollarSign, Users, TrendingUp } from 'lucide-react';
 import { formatPrice } from '../../utils/formatPrice';
-import { getProducts, getOrders } from '../../utils/api';
+import { getProducts, getOrders, getOrderSummary } from '../../utils/api';
 
 function buildMonthlyData(orders) {
   const map = {};
@@ -23,17 +23,32 @@ function buildMonthlyData(orders) {
 function AdminDashboard() {
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [summary, setSummary] = useState({ totalOrders: 0, totalRevenue: 0, pendingOrders: 0 });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [revenueRange, setRevenueRange] = useState('all'); // all | today | week | month
 
   useEffect(() => {
     async function load() {
       setLoading(true);
+      setError('');
       try {
-        const [prods, ords] = await Promise.all([getProducts(), getOrders()]);
+        const [prods, ords, sum] = await Promise.all([
+          getProducts(),
+          getOrders({ page: 1, limit: 200 }),
+          getOrderSummary(),
+        ]);
         setProducts(Array.isArray(prods) ? prods : []);
-        setOrders(Array.isArray(ords) ? ords : []);
+        const list = Array.isArray(ords?.orders) ? ords.orders : Array.isArray(ords) ? ords : [];
+        setOrders(list);
+        setSummary({
+          totalOrders: Number(sum?.totalOrders || ords?.pagination?.total || 0),
+          totalRevenue: Number(sum?.totalRevenue || 0),
+          pendingOrders: Number(sum?.pendingOrders || 0),
+        });
       } catch (e) {
         console.error(e);
+        setError(e?.message || 'Failed to load dashboard data');
       } finally {
         setLoading(false);
       }
@@ -49,7 +64,26 @@ function AdminDashboard() {
     ? (products.reduce((sum, p) => sum + (p.rating || 0), 0) / totalProducts).toFixed(1)
     : '0.0';
 
-  const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfWeek = new Date(startOfToday);
+  startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay());
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const filteredRevenueOrders = orders.filter((o) => {
+    if (revenueRange === 'all') return true;
+    const createdAt = new Date(o.createdAt || o.date);
+    if (Number.isNaN(createdAt.getTime())) return false;
+    if (revenueRange === 'today') return createdAt >= startOfToday;
+    if (revenueRange === 'week') return createdAt >= startOfWeek;
+    if (revenueRange === 'month') return createdAt >= startOfMonth;
+    return true;
+  });
+
+  const totalRevenue =
+    revenueRange === 'all'
+      ? (summary.totalRevenue || orders.reduce((sum, o) => sum + (o.total || 0), 0))
+      : filteredRevenueOrders.reduce((sum, o) => sum + (o.total || 0), 0);
 
   const monthlyData = buildMonthlyData(orders);
   const thisMonthSales = monthlyData.length > 0 ? monthlyData[monthlyData.length - 1].sales : 0;
@@ -79,12 +113,46 @@ function AdminDashboard() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-[#6B4423] mb-8">Dashboard</h1>
+      {error && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h2 className="text-sm font-semibold text-[#6B4423]">Revenue Range</h2>
+        <div className="flex items-center gap-2">
+          {[
+            { id: 'all', label: 'All Time' },
+            { id: 'today', label: 'Today' },
+            { id: 'week', label: 'This Week' },
+            { id: 'month', label: 'This Month' },
+          ].map((r) => (
+            <button
+              key={r.id}
+              onClick={() => setRevenueRange(r.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                revenueRange === r.id
+                  ? 'bg-[#2D5A27] text-white border-[#2D5A27]'
+                  : 'bg-white text-[#6B4423] border-[#8B7355]/30 hover:bg-[#F5F0E8]'
+              }`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <StatsCard title="Total Products" value={totalProducts} icon={Package} />
         <StatsCard title="Total Stock Units" value={totalStock} icon={DollarSign} />
-        <StatsCard title="Total Orders" value={orders.length} icon={Users} />
-        <StatsCard title="Total Revenue" value={formatPrice(totalRevenue)} icon={TrendingUp} />
+        <StatsCard title="Total Orders" value={summary.totalOrders || orders.length} icon={Users} />
+        <StatsCard title="Pending Orders" value={summary.pendingOrders || 0} icon={Users} />
+        <StatsCard
+          title={revenueRange === 'all' ? 'Total Revenue' : 'Revenue'}
+          value={formatPrice(totalRevenue)}
+          icon={TrendingUp}
+        />
       </div>
 
       {/* Quick Product Stats */}

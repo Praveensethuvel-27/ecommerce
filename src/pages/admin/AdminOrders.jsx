@@ -7,13 +7,14 @@ import {
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
-import { getOrders, updateOrderStatus, rejectOrder, listDrivers, assignDriver } from '../../utils/api';
+import { getOrders, getOrderSummary, updateOrderStatus, rejectOrder, listDrivers, assignDriver } from '../../utils/api';
 import { subscribeOrdersNew, subscribeOrdersUpdated } from '../../utils/realtime';
+import { useNotifications } from '../../context/NotificationContext';
 
 const COMPANY = {
   name:    "Grand Ma's Care",
   tagline: 'Pure Nature, Delivered Fresh',
-  address: '123, Organic Park, Koramangala, Bengaluru – 560034',
+  address: '176, Doordharsan Road, KK Nagar, Madurai, Tamil Nadu 625020',
   gstin:   '29ABCDE1234F1Z5',
   pan:     'ABCDE1234F',
   email:   'support@grandmascare.in',
@@ -101,8 +102,9 @@ async function generateInvoicePDF(order) {
   doc.text(COMPANY.name, 14, 15);
   doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(180,220,170);
   doc.text(COMPANY.tagline,  14, 21);
-  doc.text(COMPANY.address,  14, 26);
-  doc.text(`GSTIN: ${COMPANY.gstin}  |  PAN: ${COMPANY.pan}  |  ${COMPANY.email}  |  ${COMPANY.phone}`, 14, 31);
+  doc.text(COMPANY.address, 14, 26, { maxWidth: 115 });
+  doc.text(`GSTIN: ${COMPANY.gstin}  |  PAN: ${COMPANY.pan}`, 14, 34);
+  doc.text(`${COMPANY.email}  |  ${COMPANY.phone}`, 14, 38);
 
   doc.setFont('helvetica','bold'); doc.setFontSize(17); doc.setTextColor(255,220,100);
   doc.text('TAX INVOICE', pw-14, 15, { align:'right' });
@@ -811,6 +813,7 @@ function OrderModal({ order, onClose, onStatusChange }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function AdminOrders() {
   const [orders, setOrders]          = useState([]);
+  const [summary, setSummary]        = useState({ totalOrders: 0, pendingOrders: 0, totalRevenue: 0 });
   const [loading, setLoading]        = useState(true);
   const [error, setError]            = useState('');
   const [selectedOrder, setSelected] = useState(null);
@@ -824,14 +827,23 @@ export default function AdminOrders() {
   const [assignTarget, setAssignTarget]             = useState(null);
   const [newOrderToasts, setNewOrderToasts]         = useState([]);
   const audioRef = useRef(null);
+  const { addNotification } = useNotifications();
 
   const loadOrders = useCallback(async (page = 1) => {
     setLoading(true); setError('');
     try {
-      const data = await getOrders({ status: statusFilter, page, limit: 20 });
+      const [data, sum] = await Promise.all([
+        getOrders({ status: statusFilter, page, limit: 20 }),
+        getOrderSummary(),
+      ]);
       const list = Array.isArray(data?.orders) ? data.orders : Array.isArray(data) ? data : [];
       setOrders(list);
       if (data?.pagination) setPagination(data.pagination);
+      setSummary({
+        totalOrders: Number(sum?.totalOrders || 0),
+        pendingOrders: Number(sum?.pendingOrders || 0),
+        totalRevenue: Number(sum?.totalRevenue || 0),
+      });
     } catch (err) {
       setError(err?.message || 'Failed to load orders');
     } finally { setLoading(false); }
@@ -860,6 +872,18 @@ export default function AdminOrders() {
   const handleStatusChange = (orderId, newStatus) => {
     setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status: newStatus } : o));
     setSelected((prev) => prev?.id === orderId ? { ...prev, status: newStatus } : prev);
+    const prettyStatus = String(newStatus || '')
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+    addNotification(
+      {
+        type: 'order_status',
+        message: `Order ${orderId} marked as ${prettyStatus}.`,
+        orderId,
+        timestamp: new Date().toISOString(),
+      },
+      false
+    );
   };
 
   const handleAcceptOrder = async (order) => {
@@ -901,10 +925,10 @@ export default function AdminOrders() {
 
   // ── FIX 1: stats object was missing `const stats =` declaration ──────────
   const stats = {
-    total:   pagination.total || orders.length,
-    pending: orders.filter(o => o.status === 'pending').length,
+    total:   summary.totalOrders || pagination.total || orders.length,
+    pending: summary.pendingOrders || orders.filter(o => o.status === 'pending').length,
     shipped: orders.filter(o => o.status === 'shipped').length,
-    revenue: orders.reduce((s, o) => s + (Number(o.total)||0), 0),
+    revenue: summary.totalRevenue || orders.reduce((s, o) => s + (Number(o.total)||0), 0),
   };
 
   return (

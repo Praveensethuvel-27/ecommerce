@@ -194,24 +194,83 @@ ordersRouter.get('/', requireAuth, requireAdmin, async (req, res) => {
   });
 });
 
-// Admin: update order status
+// Admin: summary metrics for dashboard cards
+ordersRouter.get('/summary', requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    const stats = await Order.aggregate([
+      {
+        $project: {
+          status: 1,
+          totalNumeric: {
+            $convert: {
+              input: '$total',
+              to: 'double',
+              onError: 0,
+              onNull: 0,
+            },
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalOrders: { $sum: 1 },
+          pendingOrders: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'pending'] }, 1, 0],
+            },
+          },
+          totalRevenue: { $sum: '$totalNumeric' },
+        },
+      },
+    ]);
+
+    const row = stats?.[0] || { totalOrders: 0, pendingOrders: 0, totalRevenue: 0 };
+    return res.json({
+      totalOrders: row.totalOrders,
+      pendingOrders: row.pendingOrders,
+      totalRevenue: row.totalRevenue,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 ordersRouter.patch('/:id/status', requireAuth, requireAdmin, async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body || {};
-  const validStatuses = ['pending', 'confirmed', 'shipped', 'delivered', 'rejected'];
-  if (!validStatuses.includes(status)) {
-    return res.status(400).json({ error: 'Invalid status' });
-  }
-  const order = await Order.findByIdAndUpdate(id, { status }, { new: true });
-  if (!order) return res.status(404).json({ error: 'Not found' });
+  try {
+    const { id } = req.params;
+    const { status } = req.body || {};
+    const validStatuses = ['pending', 'confirmed', 'shipped', 'delivered', 'rejected'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+    const order = await Order.findByIdAndUpdate(id, { status }, { new: true });
+    if (!order) return res.status(404).json({ error: 'Not found' });
 
-  // Emit socket update for real-time sync across admin tabs
-  const io = req.app.get('io');
-  if (io) {
-    io.emit('orders:updated', { id: String(order._id), status: order.status });
-  }
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('orders:updated', { id: String(order._id), status: order.status });
+      if (status !== 'rejected') {
+        const statusLabel =
+          status === 'confirmed' ? 'Accepted' :
+          status === 'shipped' ? 'Shipped' :
+          status === 'delivered' ? 'Delivered' :
+          'Updated';
+        io.emit('admin:order_status', {
+          orderId: order.orderId,
+          status,
+          customerEmail: order.customerEmail,
+          total: order.total,
+          message: `✅ Order ${statusLabel}: ${order.orderId} — ₹${order.total}`,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
 
-  return res.json({ ok: true, status: order.status });
+    return res.json({ ok: true, status: order.status });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // Admin: reject order with reason (restores stock)

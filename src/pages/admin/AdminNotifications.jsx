@@ -16,6 +16,9 @@ function NotificationIcon({ type }) {
   if (type === 'low_stock') return <AlertTriangle className="w-5 h-5 text-orange-500" />;
   if (type === 'new_order') return <ShoppingCart className="w-5 h-5 text-[#2D5A27]" />;
   if (type === 'order_rejected') return <span className="text-lg leading-none">🚫</span>;
+
+  if (type === 'order_status') return <span className="text-lg leading-none">✅</span>;
+  if (type === 'order_shipped') return <span className="text-lg leading-none">🚚</span>;
   return <Bell className="w-5 h-5 text-[#8B7355]" />;
 }
 
@@ -136,6 +139,8 @@ function AdminNotifications() {
     if (filter === 'low_stock') return n.type === 'low_stock';
     if (filter === 'new_order') return n.type === 'new_order';
     if (filter === 'order_rejected') return n.type === 'order_rejected';
+    if (filter === 'order_status') return n.type === 'order_status';
+    if (filter === 'order_shipped') return n.type === 'order_shipped';
     return true;
   });
 
@@ -178,6 +183,8 @@ function AdminNotifications() {
           { key: 'unread', label: 'Unread', count: unreadCount },
           { key: 'low_stock', label: '⚠️ Low Stock', count: notifications.filter(n => n.type === 'low_stock').length },
           { key: 'new_order', label: '🛒 Orders', count: notifications.filter(n => n.type === 'new_order').length },
+          { key: 'order_status', label: '✅ Accepted', count: notifications.filter(n => n.type === 'order_status').length },
+          { key: 'order_shipped', label: '🚚 Shipped', count: notifications.filter(n => n.type === 'order_shipped').length },
           { key: 'order_rejected', label: '🚫 Rejected', count: notifications.filter(n => n.type === 'order_rejected').length },
         ].map((tab) => (
           <button

@@ -99,6 +99,12 @@ export async function getOrders({ status = 'all', page = 1, limit = 50 } = {}) {
   });
 }
 
+export async function getOrderSummary() {
+  return request('/api/orders/summary', {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+}
+
 // Admin: update a single order's status
 export async function updateOrderStatus(orderId, status) {
   return request(`/api/orders/${encodeURIComponent(orderId)}/status`, {

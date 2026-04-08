@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
+import { getOrders, getProducts } from '../utils/api';
 
 const NotificationContext = createContext(null);
 
@@ -34,10 +35,27 @@ export function NotificationProvider({ children }) {
   }, [notifications]);
 
   const addNotification = useCallback((data, showToast = true) => {
+    const incomingType = data.type || 'general';
+    const incomingOrderId = data.orderId || '';
+    const incomingMessage = data.message || '';
+
+    // Dedupe near-identical events to avoid duplicates from socket + local action
+    const recentDuplicateWindowMs = 5000;
+    const nowTs = Date.now();
+    const existing = loadFromStorage();
+    const hasRecentDuplicate = existing.some((n) => {
+      const sameType = (n.type || '') === incomingType;
+      const sameOrder = (n.orderId || '') === incomingOrderId;
+      const sameMessage = (n.message || '') === incomingMessage;
+      const nTs = new Date(n.timestamp || 0).getTime();
+      return sameType && sameOrder && sameMessage && Number.isFinite(nTs) && (nowTs - nTs) < recentDuplicateWindowMs;
+    });
+    if (hasRecentDuplicate) return;
+
     const notif = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      type: data.type,
-      message: data.message,
+      type: incomingType,
+      message: incomingMessage,
       timestamp: data.timestamp || new Date().toISOString(),
       read: false,
       ...(data.stock !== undefined && { stock: data.stock }),
@@ -65,13 +83,7 @@ export function NotificationProvider({ children }) {
   useEffect(() => {
     async function checkLowStockOnLoad() {
       try {
-        const BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/$/, '');
-        const token = localStorage.getItem('token');
-        const res = await fetch(`${BASE}/products`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (!res.ok) return;
-        const products = await res.json();
+        const products = await getProducts();
 
         // Get already notified product ids to avoid duplicate silent notifications
         const existing = loadFromStorage();
@@ -106,15 +118,89 @@ export function NotificationProvider({ children }) {
     checkLowStockOnLoad();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Backfill recent order notifications so page is not empty
+  // even if socket events were missed while admin was offline.
+  useEffect(() => {
+    async function backfillRecentOrderNotifications() {
+      try {
+        const data = await getOrders({ status: 'all', page: 1, limit: 50 });
+        const orders = Array.isArray(data?.orders) ? data.orders : [];
+        if (!orders.length) return;
+
+        const existing = loadFromStorage();
+        const existingKeys = new Set(
+          existing
+            .filter((n) => n.orderId && n.type)
+            .map((n) => `${n.type}:${n.orderId}`)
+        );
+
+        for (const order of orders) {
+          const orderId = order.orderId || order.id;
+          const status = String(order.status || '').toLowerCase();
+          if (!orderId) continue;
+
+          if (status === 'confirmed') {
+            const key = `order_status:${orderId}`;
+            if (existingKeys.has(key)) continue;
+            addNotification(
+              {
+                type: 'order_status',
+                orderId,
+                message: `Order ${orderId} marked as Confirmed.`,
+                timestamp: order.updatedAt || order.createdAt || new Date().toISOString(),
+              },
+              false
+            );
+            existingKeys.add(key);
+          } else if (status === 'shipped') {
+            const key = `order_shipped:${orderId}`;
+            if (existingKeys.has(key)) continue;
+            addNotification(
+              {
+                type: 'order_shipped',
+                orderId,
+                message: `Order ${orderId} has been shipped.`,
+                timestamp: order.updatedAt || order.createdAt || new Date().toISOString(),
+              },
+              false
+            );
+            existingKeys.add(key);
+          } else if (status === 'rejected') {
+            const key = `order_rejected:${orderId}`;
+            if (existingKeys.has(key)) continue;
+            addNotification(
+              {
+                type: 'order_rejected',
+                orderId,
+                reason: order.rejectionReason || '',
+                message: `Order ${orderId} was rejected.`,
+                timestamp: order.updatedAt || order.createdAt || new Date().toISOString(),
+              },
+              false
+            );
+            existingKeys.add(key);
+          }
+        }
+      } catch (e) {
+        console.warn('[Notifications] Order backfill failed:', e?.message || e);
+      }
+    }
+
+    backfillRecentOrderNotifications();
+  }, [addNotification]);
+
   // Socket connection for real-time notifications
   useEffect(() => {
-    const rawUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-    const SOCKET_URL = rawUrl.replace(/\/api\/?$/, '');
+    const token = localStorage.getItem('grandmascare_token') || '';
+    const apiBase = import.meta.env.VITE_API_BASE || '';
+    const fromEnv = apiBase ? apiBase.replace(/\/api\/?$/, '') : '';
+    const SOCKET_URL = fromEnv || window.location.origin;
 
     const socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 10,
       reconnectionDelay: 2000,
+      auth: token ? { token } : {},
     });
     socketRef.current = socket;
 
@@ -136,6 +222,14 @@ export function NotificationProvider({ children }) {
 
     socket.on('admin:order_rejected', (data) => {
       addNotification({ ...data, type: 'order_rejected' }, true);
+    });
+
+    socket.on('admin:order_status', (data) => {
+      addNotification({ ...data, type: 'order_status' }, true);
+    });
+
+    socket.on('admin:order_shipped', (data) => {
+      addNotification({ ...data, type: 'order_shipped' }, true);
     });
 
     return () => {
