@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Leaf, Shield } from 'lucide-react';
+import { Leaf, Shield, Bell, CheckCircle } from 'lucide-react';
 import { categories } from '../../data/categories';
 import { useCart } from '../../context/CartContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -12,7 +12,7 @@ import Breadcrumb from '../../components/layout/Breadcrumb';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import { AccordionItem } from '../../components/common/Accordion';
-import { getProductBySlug, getProducts } from '../../utils/api';
+import { getProductBySlug, getProducts, subscribeRestock } from '../../utils/api';
 import { subscribeProductsChanged } from '../../utils/realtime';
 
 function Product() {
@@ -26,72 +26,77 @@ function Product() {
   const [allProducts, setAllProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [addedToCart, setAddedToCart] = useState(false);
+  const [notifyEmail, setNotifyEmail] = useState('');
+  const [notifyStatus, setNotifyStatus] = useState('idle'); // idle | loading | success | error
+  const [notifyError, setNotifyError] = useState('');
 
-  // Fetch current product
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    setError('');
-    setProduct(null);
+    Promise.resolve().then(() => {
+      if (!active) return;
+      setLoading(true);
+      setError('');
+      setProduct(null);
+    });
     getProductBySlug(productSlug)
-      .then((p) => { if (active) { setProduct(p); setError(''); } })
-      .catch((err) => { if (active) setError(err?.message || 'Failed to load product'); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+      .then((p) => {
+        if (!active) return;
+        setError('');
+        setProduct(p);
+      })
+      .catch((err) => {
+        if (active) setError(err?.message || 'Failed to load product');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [productSlug]);
 
-  // Fetch all products — re-fetch when productSlug changes so related is always fresh
   useEffect(() => {
     let active = true;
     getProducts()
-      .then((list) => { if (active) setAllProducts(Array.isArray(list) ? list : []); })
+      .then((list) => {
+        if (active) setAllProducts(Array.isArray(list) ? list : []);
+      })
       .catch(() => {});
-    return () => { active = false; };
-  }, [productSlug]);
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  // Reset weight when product changes
   useEffect(() => {
     if (product?.weightOptions?.length > 0) {
       setSelectedWeight(product.weightOptions[0].weight);
     } else {
       setSelectedWeight('');
     }
-    setAddedToCart(false);
-    setQuantity(1);
   }, [product?.id]);
 
-  // Realtime updates
   useEffect(() => {
     const unsub = subscribeProductsChanged((evt) => {
+      // Keep the current product fresh if it changes
       if (evt?.type === 'updated' || evt?.type === 'deleted') {
         if (evt?.id && product?.id && evt.id !== product.id) return;
       }
-      getProductBySlug(productSlug).then(setProduct).catch(() => {});
-      getProducts().then((list) => setAllProducts(Array.isArray(list) ? list : [])).catch(() => {});
+      getProductBySlug(productSlug)
+        .then(setProduct)
+        .catch(() => {});
+      getProducts()
+        .then((list) => setAllProducts(Array.isArray(list) ? list : []))
+        .catch(() => {});
     });
     return unsub;
   }, [productSlug, product?.id]);
 
   const category = product ? categories.find((c) => c.id === product.categoryId) : null;
-
-  // Related: same category, exclude current, max 4
   const relatedProducts = product
-    ? allProducts
-        .filter((p) => p.categoryId === product.categoryId && p.id !== product.id)
-        .slice(0, 4)
+    ? allProducts.filter((p) => p.categoryId === product.categoryId && p.id !== product.id).slice(0, 4)
     : [];
 
-  // If less than 4 related in same category, fill with other categories
-  const extraProducts =
-    relatedProducts.length < 4 && product
-      ? allProducts
-          .filter((p) => p.categoryId !== product.categoryId && p.id !== product.id)
-          .slice(0, 4 - relatedProducts.length)
-      : [];
-
-  const displayedRelated = [...relatedProducts, ...extraProducts];
-
+  // Get translated product name
   const getProductName = () => {
     const productKeyMap = {
       'nalangu-maavu': 'product.nalanguMaavu',
@@ -112,6 +117,7 @@ function Product() {
     return key ? t(key) : product?.name || '';
   };
 
+  // Get translated category name
   const getCategoryName = (cat) => {
     const categoryKeyMap = {
       'maavus': 'category.maavus',
@@ -123,6 +129,7 @@ function Product() {
     return key ? t(key) : cat?.name || '';
   };
 
+  // Get translated health benefit
   const getTranslatedBenefit = (benefit) => {
     const benefitKeyMap = {
       'Natural skin nourishment': 'benefit.naturalSkinNourishment',
@@ -169,6 +176,21 @@ function Product() {
     return key ? t(key) : benefit;
   };
 
+  const handleNotifyMe = async (e) => {
+    e.preventDefault();
+    if (!notifyEmail) return;
+    setNotifyStatus('loading');
+    setNotifyError('');
+    try {
+      await subscribeRestock(product.id, notifyEmail);
+      setNotifyStatus('success');
+      setNotifyEmail('');
+    } catch (err) {
+      setNotifyStatus('error');
+      setNotifyError(err?.message || 'Failed to subscribe. Please try again.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-16 text-center">
@@ -202,8 +224,6 @@ function Product() {
 
   const handleAddToCart = () => {
     addItem(product.id, quantity, weightOptions ? selectedWeight : '');
-    setAddedToCart(true);
-    setTimeout(() => setAddedToCart(false), 2000);
   };
 
   return (
@@ -260,33 +280,83 @@ function Product() {
             </ol>
           </div>
 
-          <div className="mt-8 flex flex-wrap items-center gap-4">
-            {weightOptions && (
-              <div>
-                <label className="block text-sm font-medium text-[#6B4423] mb-1">Weight</label>
-                <select
-                  value={selectedWeight}
-                  onChange={(e) => setSelectedWeight(e.target.value)}
-                  className="px-4 py-2.5 rounded-xl border border-[#8B7355]/30 bg-white text-[#6B4423]"
-                  required={weightOptions.length > 0}
-                >
-                  <option value="">Select weight</option>
-                  {weightOptions.map((wo) => (
-                    <option key={wo.weight} value={wo.weight}>{wo.weight}</option>
-                  ))}
-                </select>
+          {product.stock <= 0 ? (
+            /* ── OUT OF STOCK — Notify Me Box ── */
+            <div className="mt-8">
+              <div className="inline-block px-3 py-1 rounded-full bg-red-100 text-red-700 text-sm font-medium mb-4">
+                Out of Stock
               </div>
-            )}
-            <QuantitySelector value={quantity} onChange={setQuantity} />
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={handleAddToCart}
-              disabled={weightOptions && weightOptions.length > 0 && !selectedWeight}
-            >
-              {addedToCart ? '✓ Added!' : t('common.addToCart')}
-            </Button>
-          </div>
+              <div className="bg-[#F5F0E8] border border-[#8B7355]/20 rounded-2xl p-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <Bell className="w-5 h-5 text-[#2D5A27]" />
+                  <h3 className="font-semibold text-[#6B4423]">Notify Me When Available</h3>
+                </div>
+                <p className="text-sm text-[#8B7355] mb-4">
+                  Enter your email and we'll let you know as soon as this product is back in stock.
+                </p>
+                {notifyStatus === 'success' ? (
+                  <div className="flex items-center gap-2 text-[#2D5A27] bg-[#E8F0E8] rounded-xl px-4 py-3">
+                    <CheckCircle className="w-5 h-5 flex-shrink-0" />
+                    <p className="text-sm font-medium">
+                      You're subscribed! We'll email you when it's back in stock.
+                    </p>
+                  </div>
+                ) : (
+                  <form onSubmit={handleNotifyMe} className="flex flex-col sm:flex-row gap-3">
+                    <input
+                      type="email"
+                      required
+                      placeholder="your@email.com"
+                      value={notifyEmail}
+                      onChange={(e) => setNotifyEmail(e.target.value)}
+                      className="flex-1 px-4 py-2.5 rounded-xl border border-[#8B7355]/30 bg-white text-[#6B4423] focus:outline-none focus:border-[#2D5A27]"
+                    />
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      disabled={notifyStatus === 'loading'}
+                    >
+                      {notifyStatus === 'loading' ? 'Subscribing…' : 'Notify Me'}
+                    </Button>
+                  </form>
+                )}
+                {notifyStatus === 'error' && (
+                  <p className="mt-2 text-sm text-red-600">{notifyError}</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* ── IN STOCK — Normal Add to Cart ── */
+            <div className="mt-8 flex flex-wrap items-center gap-4">
+              {weightOptions && (
+                <div>
+                  <label className="block text-sm font-medium text-[#6B4423] mb-1">Weight</label>
+                  <select
+                    value={selectedWeight}
+                    onChange={(e) => setSelectedWeight(e.target.value)}
+                    className="px-4 py-2.5 rounded-xl border border-[#8B7355]/30 bg-white text-[#6B4423]"
+                    required={weightOptions.length > 0}
+                  >
+                    <option value="">Select weight</option>
+                    {weightOptions.map((wo) => (
+                      <option key={wo.weight} value={wo.weight}>
+                        {wo.weight}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <QuantitySelector value={quantity} onChange={setQuantity} />
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={handleAddToCart}
+                disabled={weightOptions && weightOptions.length > 0 && !selectedWeight}
+              >
+                {t('common.addToCart')}
+              </Button>
+            </div>
+          )}
 
           <div className="mt-6 flex items-center gap-4 text-sm text-[#8B7355]">
             <span className="flex items-center gap-1">
@@ -301,22 +371,11 @@ function Product() {
         </div>
       </div>
 
-      {/* Related Products */}
-      {displayedRelated.length > 0 && (
-        <section className="border-t border-[#8B7355]/10 pt-12">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-[#6B4423]">
-              {relatedProducts.length > 0 ? t('product.relatedProducts') : 'You May Also Like'}
-            </h2>
-            <Link
-              to={category ? `/shop/${category.slug}` : '/shop'}
-              className="text-sm text-[#2D5A27] hover:underline font-medium"
-            >
-              View all →
-            </Link>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            {displayedRelated.map((p) => (
+      {relatedProducts.length > 0 && (
+        <section>
+          <h2 className="text-2xl font-bold text-[#6B4423] mb-6">{t('product.relatedProducts')}</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {relatedProducts.map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}
           </div>

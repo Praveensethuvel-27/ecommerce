@@ -192,3 +192,18 @@ export async function createDriver(data) {
     body: JSON.stringify(data),
   });
 }
+// Restock notification — customer subscribes
+export async function subscribeRestock(productId, email) {
+  return request('/api/restock/subscribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ productId, email }),
+  });
+}
+
+// Admin: get subscriber count for a product
+export async function getRestockSubscriberCount(productId) {
+  return request(`/api/restock/subscribers/${encodeURIComponent(productId)}`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+}

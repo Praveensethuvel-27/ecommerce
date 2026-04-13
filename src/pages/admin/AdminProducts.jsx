@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, Download } from 'lucide-react';
+import { Plus, Pencil, Trash2, Download, Bell } from 'lucide-react';
 import { categories } from '../../data/categories';
 import { formatPrice } from '../../utils/formatPrice';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
 import Input from '../../components/common/Input';
-import { adminCreateProduct, adminDeleteProduct, adminUpdateProduct, getProducts, getProductSales } from '../../utils/api';
+import { adminCreateProduct, adminDeleteProduct, adminUpdateProduct, getProducts, getProductSales, getRestockSubscriberCount } from '../../utils/api';
 import { subscribeProductsChanged } from '../../utils/realtime';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -16,6 +16,7 @@ function AdminProducts() {
   const [productList, setProductList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [subscriberCounts, setSubscriberCounts] = useState({});
 
   const initialCategoryId = useMemo(() => categories[0]?.id || '', []);
   const [form, setForm] = useState({
@@ -34,6 +35,18 @@ function AdminProducts() {
     try {
       const list = await getProducts();
       setProductList(Array.isArray(list) ? list : []);
+      // Load restock subscriber counts for out-of-stock products
+      const outOfStock = (Array.isArray(list) ? list : []).filter((p) => p.stock <= 0);
+      const counts = {};
+      await Promise.allSettled(
+        outOfStock.map(async (p) => {
+          try {
+            const res = await getRestockSubscriberCount(p.id);
+            if (res?.count > 0) counts[p.id] = res.count;
+          } catch { /* ignore */ }
+        })
+      );
+      setSubscriberCounts(counts);
     } catch (err) {
       setError(err?.message || 'Failed to load products');
     } finally {
@@ -255,7 +268,15 @@ function AdminProducts() {
                       ? product.weightOptions.map((w) => `${w.weight}: ${formatPrice(w.price)}`).join(', ')
                       : formatPrice(product.price)}
                   </td>
-                  <td className="p-4 text-[#6B4423]">{product.stock}</td>
+                  <td className="p-4 text-[#6B4423]">
+                    {product.stock}
+                    {product.stock <= 0 && subscriberCounts[product.id] > 0 && (
+                      <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-medium">
+                        <Bell className="w-3 h-3" />
+                        {subscriberCounts[product.id]} waiting
+                      </span>
+                    )}
+                  </td>
                   <td className="p-4">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                       product.stock > 0 ? 'bg-[#E8F0E8] text-[#2D5A27]' : 'bg-red-100 text-red-700'

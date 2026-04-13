@@ -126,7 +126,7 @@ productsRouter.post(
         price: weightOptions[0].price,
         originalPrice: toNumber(req.body?.originalPrice),
         description,
-        stock: toNumber(req.body?.stock, 0),
+        stock: Math.max(0, toNumber(req.body?.stock, 0)),
         featured: toBool(req.body?.featured, false),
         images: imageUrls,
         weightOptions,
@@ -161,7 +161,7 @@ productsRouter.put(
 
       if (req.body?.description) patch.description = req.body.description;
       if (req.body?.categoryId) patch.categoryId = req.body.categoryId.trim();
-      if (req.body?.stock !== undefined) patch.stock = toNumber(req.body.stock);
+      if (req.body?.stock !== undefined) patch.stock = Math.max(0, toNumber(req.body.stock, 0));
       if (req.body?.featured !== undefined) patch.featured = toBool(req.body.featured);
 
       if (req.body?.weightOptions) {
