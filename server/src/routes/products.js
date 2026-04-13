@@ -90,7 +90,7 @@ productsRouter.post(
   '/',
   requireAuth,
   requireAdmin,
-  uploadProductImage.single('image'),
+  uploadProductImage.array('images', 4),
   async (req, res) => {
     try {
       const { name, description, categoryId } = req.body || {};
@@ -99,14 +99,17 @@ productsRouter.post(
       }
 
       const slug = await uniqueSlugFromName(name);
-      let imageUrl;
-      if (req.file) {
-        if (env.cloudinaryCloudName) {
-          imageUrl = await uploadToCloudinary(req.file.buffer);
-        } else {
-          // fallback for local dev: save to disk
-          const { writeFileToDisk } = await import('../utils/localUpload.js');
-          imageUrl = await writeFileToDisk(req.file);
+      const imageUrls = [];
+      if (req.files && req.files.length > 0) {
+        for (const file of req.files) {
+          if (env.cloudinaryCloudName) {
+            const url = await uploadToCloudinary(file.buffer);
+            imageUrls.push(url);
+          } else {
+            const { writeFileToDisk } = await import('../utils/localUpload.js');
+            const url = await writeFileToDisk(file);
+            imageUrls.push(url);
+          }
         }
       }
 
@@ -124,7 +127,7 @@ productsRouter.post(
         description,
         stock: toNumber(req.body?.stock, 0),
         featured: toBool(req.body?.featured, false),
-        images: imageUrl ? [imageUrl] : [],
+        images: imageUrls,
         weightOptions,
       });
 
@@ -143,7 +146,7 @@ productsRouter.put(
   '/:id',
   requireAuth,
   requireAdmin,
-  uploadProductImage.single('image'),
+  uploadProductImage.array('images', 4),
   async (req, res) => {
     try {
       const existing = await Product.findById(req.params.id);
@@ -169,13 +172,19 @@ productsRouter.put(
         patch.price = weightOptions[0].price;
       }
 
-      if (req.file) {
-        if (env.cloudinaryCloudName) {
-          patch.images = [await uploadToCloudinary(req.file.buffer)];
-        } else {
-          const { writeFileToDisk } = await import('../utils/localUpload.js');
-          patch.images = [await writeFileToDisk(req.file)];
+      if (req.files && req.files.length > 0) {
+        const imageUrls = [];
+        for (const file of req.files) {
+          if (env.cloudinaryCloudName) {
+            const url = await uploadToCloudinary(file.buffer);
+            imageUrls.push(url);
+          } else {
+            const { writeFileToDisk } = await import('../utils/localUpload.js');
+            const url = await writeFileToDisk(file);
+            imageUrls.push(url);
+          }
         }
+        patch.images = imageUrls;
       }
 
       const updated = await Product.findByIdAndUpdate(req.params.id, patch, { new: true });

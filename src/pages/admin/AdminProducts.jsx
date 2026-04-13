@@ -184,8 +184,6 @@ function AdminProducts() {
     fd.append('weightOptions', JSON.stringify(validWeightOptions));
     if (Array.isArray(form.images) && form.images.length > 0) {
       form.images.forEach((file) => fd.append('images', file));
-      // Backward compatibility for servers expecting single `image`.
-      fd.append('image', form.images[0]);
     }
 
     try {
