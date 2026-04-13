@@ -22,17 +22,7 @@ function FilterSidebar({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const sortOptions = getSortOptions(t);
   
-  // Get translated category name
-  const getCategoryName = (cat) => {
-    const categoryKeyMap = {
-      'maavus': 'category.maavus',
-      'kanji-kali-mixes': 'category.kanjiKali',
-      'podi-thool': 'category.podiThool',
-      'special-blends': 'category.specialBlends',
-    };
-    const key = categoryKeyMap[cat.slug];
-    return key ? t(key) : cat.name;
-  };
+  const getCategoryName = (cat) => cat.name;
 
   return (
     <div className="space-y-6">

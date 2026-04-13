@@ -24,7 +24,7 @@ function AdminProducts() {
     stock: '',
     description: '',
     featured: false,
-    image: null,
+    images: [],
     weightOptions: [{ weight: '', price: '' }],
   });
 
@@ -69,7 +69,7 @@ function AdminProducts() {
       stock: product?.stock ?? '',
       description: product?.description || '',
       featured: !!product?.featured,
-      image: null,
+      images: [],
       weightOptions: wopts,
     });
   };
@@ -182,7 +182,11 @@ function AdminProducts() {
     fd.append('description', form.description);
     fd.append('featured', String(form.featured));
     fd.append('weightOptions', JSON.stringify(validWeightOptions));
-    if (form.image) fd.append('image', form.image);
+    if (Array.isArray(form.images) && form.images.length > 0) {
+      form.images.forEach((file) => fd.append('images', file));
+      // Backward compatibility for servers expecting single `image`.
+      fd.append('image', form.images[0]);
+    }
 
     try {
       if (editingProduct) {
@@ -363,12 +367,21 @@ function AdminProducts() {
             <label htmlFor="featured" className="text-sm font-medium text-[#6B4423]">Featured</label>
           </div>
           <div>
-            <label className="block text-sm font-medium text-[#6B4423] mb-1">Product Image</label>
+            <label className="block text-sm font-medium text-[#6B4423] mb-1">Product Images (up to 4)</label>
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
-              onChange={(e) => setForm((f) => ({ ...f, image: e.target.files?.[0] || null }))}
+              multiple
+              onChange={(e) => {
+                const files = Array.from(e.target.files || []).slice(0, 4);
+                setForm((f) => ({ ...f, images: files }));
+              }}
             />
+            {form.images.length > 0 && (
+              <p className="mt-1 text-xs text-[#8B7355]">
+                Selected: {form.images.map((f) => f.name).join(', ')}
+              </p>
+            )}
           </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button>

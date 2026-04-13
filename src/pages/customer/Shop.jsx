@@ -67,6 +67,15 @@ function Shop() {
     return result;
   }, [categorySlug, priceRange, sortBy, products]);
 
+  const productsByCategory = useMemo(
+    () =>
+      categories.map((cat) => ({
+        category: cat,
+        products: filteredProducts.filter((p) => p.categoryId === cat.id),
+      })),
+    [filteredProducts],
+  );
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Breadcrumb items={[{ to: '/', label: t('common.home') }, { to: '/shop', label: t('common.shop') }]} />
@@ -94,10 +103,26 @@ function Shop() {
             <p className="text-center text-[#8B7355] py-12">Loading…</p>
           ) : error ? (
             <p className="text-center text-red-600 py-12">{error}</p>
-          ) : filteredProducts.length > 0 ? (
-            <ProductGrid products={filteredProducts} />
+          ) : categorySlug ? (
+            filteredProducts.length > 0 ? (
+              <ProductGrid products={filteredProducts} />
+            ) : (
+              <p className="text-center text-[#8B7355] py-12">{t('common.noProductsFound')}</p>
+            )
           ) : (
-            <p className="text-center text-[#8B7355] py-12">{t('common.noProductsFound')}</p>
+            <div className="space-y-10">
+              {productsByCategory.map(({ category, products: list }) => (
+                <section key={category.id}>
+                  <h2 className="text-xl font-semibold text-[#6B4423] mb-1">{category.name}</h2>
+                  <p className="text-sm text-[#8B7355] mb-4">{category.description}</p>
+                  {list.length > 0 ? (
+                    <ProductGrid products={list} />
+                  ) : (
+                    <p className="text-[#8B7355] py-4">No products in this category.</p>
+                  )}
+                </section>
+              ))}
+            </div>
           )}
         </div>
       </div>

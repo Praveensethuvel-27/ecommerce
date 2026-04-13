@@ -51,7 +51,7 @@ function Header() {
               className="h-8 sm:h-10 w-auto rounded-lg object-contain"
             />
             <span className="text-base sm:text-xl font-bold text-[#2D5A27]">
-              Grand Ma's Care
+              GrandMa's Care
             </span>
           </Link>
 

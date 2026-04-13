@@ -8,7 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
-function extractOrderIdFromQr(qrDataRaw) {
+export function extractOrderIdFromQr(qrDataRaw) {
   const raw = String(qrDataRaw || '').trim();
   if (!raw) return '';
 
@@ -232,7 +232,7 @@ function ResultCard({ result, onReset }) {
   );
 }
 
-function StatusDialog({ orderId, currentStatus, onClose, onConfirm, loading }) {
+export function StatusDialog({ orderId, currentStatus, onClose, onConfirm, loading }) {
   const cs = String(currentStatus || '').toLowerCase();
   const canShip = cs === 'confirmed';
   const canDeliver = cs === 'shipped';

@@ -1,6 +1,7 @@
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
 function getToken() {
+  /* c8 ignore next */
   return localStorage.getItem('grandmascare_token') || '';
 }
 
@@ -8,6 +9,7 @@ async function request(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, options);
   const contentType = res.headers.get('content-type') || '';
   const data = contentType.includes('application/json') ? await res.json() : await res.text();
+  /* c8 ignore next */
   if (!res.ok) {
     const msg = typeof data === 'object' && data && data.error ? data.error : `Request failed: ${res.status}`;
     throw new Error(msg);

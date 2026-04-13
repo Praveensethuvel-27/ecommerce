@@ -33,10 +33,6 @@ function Checkout() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!user) {
-      navigate('/login', { state: { from: '/checkout' } });
-      return;
-    }
     setSubmitting(true);
     try {
       const orderData = {

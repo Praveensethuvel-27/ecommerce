@@ -18,7 +18,7 @@ const getHealthBenefits = (t) => [
 ];
 
 const testimonials = [
-  { quote: 'Authentic taste and quality. Grand Ma\'s Care brings back childhood memories.', name: 'Lakshmi R.', location: 'Chennai' },
+  { quote: 'Authentic taste and quality. GrandMa\'s Care brings back childhood memories.', name: 'Lakshmi R.', location: 'Chennai' },
   { quote: 'The Nalangu Maavu is exactly what my grandmother used to make. Pure and natural!', name: 'Priya M.', location: 'Coimbatore' },
 ];
 

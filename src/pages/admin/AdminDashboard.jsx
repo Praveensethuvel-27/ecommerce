@@ -77,7 +77,7 @@ function AdminDashboard() {
     if (revenueRange === 'today') return createdAt >= startOfToday;
     if (revenueRange === 'week') return createdAt >= startOfWeek;
     if (revenueRange === 'month') return createdAt >= startOfMonth;
-    return true;
+    // If an unknown range ever appears, treat it as "exclude" (falsey).
   });
 
   const totalRevenue =

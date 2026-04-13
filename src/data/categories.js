@@ -1,6 +1,6 @@
 export const categories = [
-  { id: '1', name: 'Maavus', slug: 'maavus', description: 'Traditional flours and powders' },
-  { id: '2', name: 'Kanji/Kali Mixes', slug: 'kanji-kali-mixes', description: 'Porridge and kali mixes' },
-  { id: '3', name: 'Podi/Thool', slug: 'podi-thool', description: 'Spice powders and seasonings' },
-  { id: '4', name: 'Special Blends', slug: 'special-blends', description: 'Specialty wellness mixes' },
+  { id: '1', name: 'Skin Care', slug: 'maavus', description: 'Products for skin nourishment and glow' },
+  { id: '2', name: 'Hair Care', slug: 'kanji-kali-mixes', description: 'Products for healthy scalp and hair' },
+  { id: '3', name: 'Health Care', slug: 'podi-thool', description: 'Wellness products for daily health support' },
+  { id: '4', name: 'Health Drink', slug: 'special-blends', description: 'Nutritious drinks and wellness blends' },
 ];
