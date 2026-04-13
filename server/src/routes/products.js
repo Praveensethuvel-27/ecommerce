@@ -6,6 +6,7 @@ import { uploadProductImage } from '../middleware/upload.js';
 import { toProductDto } from '../utils/productDto.js';
 import { uploadToCloudinary } from '../utils/cloudinary.js';
 import { env } from '../config/env.js';
+import { triggerRestockNotifications } from './restock.js';
 
 export const productsRouter = express.Router();
 
@@ -187,9 +188,18 @@ productsRouter.put(
         patch.images = imageUrls;
       }
 
+      const prevStock = existing.stock || 0;
       const updated = await Product.findByIdAndUpdate(req.params.id, patch, { new: true });
 
       req.app.get('io')?.emit('products:changed', { type: 'updated' });
+
+      // Auto-trigger restock emails if stock was 0 and now > 0
+      const newStock = patch.stock !== undefined ? patch.stock : prevStock;
+      if (prevStock === 0 && newStock > 0) {
+        triggerRestockNotifications(req.params.id, req.app.get('io')).catch((err) => {
+          console.error('Restock notification error:', err);
+        });
+      }
 
       res.json(toProductDto(updated));
     } catch (error) {
