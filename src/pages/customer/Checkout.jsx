@@ -1,19 +1,27 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CreditCard, Banknote, Smartphone } from 'lucide-react';
+import { Smartphone } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 import { formatPrice } from '../../utils/formatPrice';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import Breadcrumb from '../../components/layout/Breadcrumb';
-import { createOrder } from '../../utils/api';
 
 const paymentMethods = [
-
-  { id: 'upi', label: 'UPI', icon: Smartphone },
-
+  { id: 'upi', label: 'UPI / Razorpay', icon: Smartphone },
 ];
+
+function loadRazorpayScript() {
+  return new Promise((resolve) => {
+    if (window.Razorpay) return resolve(true);
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
 
 function Checkout() {
   const navigate = useNavigate();
@@ -29,26 +37,111 @@ function Checkout() {
     state: '',
     pincode: '',
   });
-  const [payment, setPayment] = useState('cod');
+  const [payment, setPayment] = useState('upi');
+
+  const getToken = () => localStorage.getItem('grandmascare_token') || '';
+  const API_BASE = import.meta.env.VITE_API_BASE || '';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
+
     try {
-      const orderData = {
-        items: cartItems.map((item) => ({
-          productId: item.id,
-          weight: item.weight || undefined,
-          quantity: item.quantity,
-        })),
-        address: form,
-        paymentMethod: payment,
-      };
-      const result = await createOrder(orderData);
-      clearCart();
-      navigate('/account/orders', { state: { message: `Order placed! Order ID: ${result.orderId}` } });
+      // 1. Load Razorpay SDK
+      const loaded = await loadRazorpayScript();
+      if (!loaded) {
+        alert('Failed to load Razorpay. Check your internet connection.');
+        setSubmitting(false);
+        return;
+      }
+
+      // 2. Create Razorpay order on server
+      const createRes = await fetch(`${API_BASE}/api/orders/razorpay/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ amount: total }),
+      });
+
+      if (!createRes.ok) {
+        const err = await createRes.json();
+        throw new Error(err.error || 'Failed to create payment order');
+      }
+
+      const { orderId: rzpOrderId, amount: rzpAmount, currency, keyId } = await createRes.json();
+
+      // 3. Open Razorpay popup
+      await new Promise((resolve, reject) => {
+        const options = {
+          key: keyId,
+          amount: rzpAmount,
+          currency,
+          name: "Grandma's Care",
+          description: 'Order Payment',
+          order_id: rzpOrderId,
+          prefill: {
+            name: form.name,
+            contact: form.phone,
+            email: user?.email || '',
+          },
+          theme: { color: '#2D5A27' },
+          handler: async (response) => {
+            try {
+              // 4. Verify payment + create DB order
+              const verifyRes = await fetch(`${API_BASE}/api/orders/razorpay/verify`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${getToken()}`,
+                },
+                body: JSON.stringify({
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                  cartItems: cartItems.map((item) => ({
+                    productId: item.id,
+                    weight: item.weight || undefined,
+                    quantity: item.quantity,
+                  })),
+                  address: form,
+                }),
+              });
+
+              if (!verifyRes.ok) {
+                const err = await verifyRes.json();
+                reject(new Error(err.error || 'Payment verification failed'));
+                return;
+              }
+
+              const result = await verifyRes.json();
+              clearCart();
+              navigate('/account/orders', {
+                state: { message: `Order placed! Order ID: ${result.orderId}` },
+              });
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
+          },
+          modal: {
+            ondismiss: () => {
+              reject(new Error('Payment cancelled'));
+            },
+          },
+        };
+
+        const rzp = new window.Razorpay(options);
+        rzp.on('payment.failed', (response) => {
+          reject(new Error(response.error?.description || 'Payment failed'));
+        });
+        rzp.open();
+      });
     } catch (err) {
-      alert(err?.message || 'Failed to place order');
+      if (err.message !== 'Payment cancelled') {
+        alert(err?.message || 'Failed to place order');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -190,7 +283,7 @@ function Checkout() {
                 <span>{formatPrice(total)}</span>
               </div>
               <Button type="submit" variant="primary" className="w-full mt-6" size="lg" disabled={submitting}>
-                {submitting ? 'Placing Order…' : 'Place Order'}
+                {submitting ? 'Opening Payment…' : 'Place Order'}
               </Button>
             </div>
           </div>

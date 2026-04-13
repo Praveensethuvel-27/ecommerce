@@ -14,8 +14,11 @@ export const env = {
   clientOrigin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
   seedAdminEmail: process.env.ADMIN_EMAIL,
   seedAdminPassword: process.env.ADMIN_PASSWORD,
-  // Cloudinary (required for image uploads on Render)
+  // Cloudinary
   cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
   cloudinaryApiKey: process.env.CLOUDINARY_API_KEY || '',
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET || '',
+  // Razorpay
+  razorpayKeyId: process.env.RAZORPAY_KEY_ID || '',
+  razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET || '',
 };
