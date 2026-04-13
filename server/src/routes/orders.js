@@ -20,6 +20,32 @@ function toNumber(v, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+// ─── Public: Track order by orderId (no auth needed) ─────────────────────────
+ordersRouter.get('/track/:orderId', async (req, res) => {
+  const order = await Order.findOne({ orderId: req.params.orderId }).lean();
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+  return res.json({
+    orderId: order.orderId,
+    status: order.status,
+    items: order.items.map((i) => ({
+      name: i.productName,
+      weight: i.weight || '',
+      quantity: i.quantity,
+      price: i.price,
+    })),
+    total: order.total,
+    address: {
+      name: order.address?.name || '',
+      city: order.address?.city || '',
+      state: order.address?.state || '',
+      pincode: order.address?.pincode || '',
+    },
+    paymentMethod: order.paymentMethod,
+    createdAt: order.createdAt,
+    rejectionReason: order.rejectionReason || '',
+  });
+});
+
 // ─── Razorpay: Create payment order ──────────────────────────────────────────
 ordersRouter.post('/razorpay/create', requireAuth, async (req, res) => {
   const { amount } = req.body;

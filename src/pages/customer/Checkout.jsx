@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Smartphone } from 'lucide-react';
+import { Smartphone, MapPin } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 import { formatPrice } from '../../utils/formatPrice';
@@ -23,31 +23,67 @@ function loadRazorpayScript() {
   });
 }
 
+const EMPTY_FORM = {
+  name: '', phone: '', address1: '', address2: '',
+  city: '', state: '', pincode: '',
+};
+
 function Checkout() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { cartItems, subtotal, shipping, total, clearCart } = useCart();
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({
-    name: '',
-    phone: '',
-    address1: '',
-    address2: '',
-    city: '',
-    state: '',
-    pincode: '',
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [saveAddress, setSaveAddress] = useState(false);
+  const [hasSavedAddress, setHasSavedAddress] = useState(false);
   const [payment, setPayment] = useState('upi');
 
   const getToken = () => localStorage.getItem('grandmascare_token') || '';
   const API_BASE = import.meta.env.VITE_API_BASE || '';
+
+  // Load saved address on mount
+  useEffect(() => {
+    if (!user) return;
+    fetch(`${API_BASE}/api/auth/address`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        const addr = data.address || {};
+        if (addr.address1) {
+          setForm({
+            name: addr.name || '',
+            phone: addr.phone || '',
+            address1: addr.address1 || '',
+            address2: addr.address2 || '',
+            city: addr.city || '',
+            state: addr.state || '',
+            pincode: addr.pincode || '',
+          });
+          setHasSavedAddress(true);
+        }
+      })
+      .catch(() => {});
+  }, [user]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
 
     try {
-      // 1. Load Razorpay SDK
+      // Save address if checkbox ticked
+      if (saveAddress) {
+        await fetch(`${API_BASE}/api/auth/address`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify(form),
+        });
+      }
+
+      // Load Razorpay SDK
       const loaded = await loadRazorpayScript();
       if (!loaded) {
         alert('Failed to load Razorpay. Check your internet connection.');
@@ -55,7 +91,7 @@ function Checkout() {
         return;
       }
 
-      // 2. Create Razorpay order on server
+      // Create Razorpay order
       const createRes = await fetch(`${API_BASE}/api/orders/razorpay/create`, {
         method: 'POST',
         headers: {
@@ -72,7 +108,7 @@ function Checkout() {
 
       const { orderId: rzpOrderId, amount: rzpAmount, currency, keyId } = await createRes.json();
 
-      // 3. Open Razorpay popup
+      // Open Razorpay popup
       await new Promise((resolve, reject) => {
         const options = {
           key: keyId,
@@ -89,7 +125,6 @@ function Checkout() {
           theme: { color: '#2D5A27' },
           handler: async (response) => {
             try {
-              // 4. Verify payment + create DB order
               const verifyRes = await fetch(`${API_BASE}/api/orders/razorpay/verify`, {
                 method: 'POST',
                 headers: {
@@ -117,8 +152,8 @@ function Checkout() {
 
               const result = await verifyRes.json();
               clearCart();
-              navigate('/account/orders', {
-                state: { message: `Order placed! Order ID: ${result.orderId}` },
+              navigate('/track-order', {
+                state: { orderId: result.orderId, message: `Order placed! Order ID: ${result.orderId}` },
               });
               resolve();
             } catch (err) {
@@ -126,9 +161,7 @@ function Checkout() {
             }
           },
           modal: {
-            ondismiss: () => {
-              reject(new Error('Payment cancelled'));
-            },
+            ondismiss: () => reject(new Error('Payment cancelled')),
           },
         };
 
@@ -172,77 +205,61 @@ function Checkout() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Breadcrumb items={[{ to: '/', label: 'Home' }, { to: '/cart', label: 'Cart' }, { label: 'Checkout' }]} />
-
       <h1 className="text-2xl font-bold text-[#6B4423] mb-8">Checkout</h1>
 
       <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
           <div>
-            <h2 className="font-semibold text-[#6B4423] mb-4">Delivery Address</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-[#6B4423]">Delivery Address</h2>
+              {hasSavedAddress && (
+                <span className="flex items-center gap-1 text-xs text-[#2D5A27] bg-[#E8F0E8] px-2 py-1 rounded-full">
+                  <MapPin className="w-3 h-3" /> Saved address loaded
+                </span>
+              )}
+            </div>
+
             <div className="space-y-4 bg-[#FAFAF8] rounded-2xl p-6 border border-[#8B7355]/10">
-              <Input
-                label="Full Name"
-                required
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-              />
-              <Input
-                label="Phone"
-                type="tel"
-                required
-                value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              />
-              <Input
-                label="Address Line 1"
-                required
-                value={form.address1}
-                onChange={(e) => setForm({ ...form, address1: e.target.value })}
-              />
-              <Input
-                label="Address Line 2"
-                value={form.address2}
-                onChange={(e) => setForm({ ...form, address2: e.target.value })}
-              />
+              <Input label="Full Name" required value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Input label="Phone" type="tel" required value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              <Input label="Address Line 1" required value={form.address1}
+                onChange={(e) => setForm({ ...form, address1: e.target.value })} />
+              <Input label="Address Line 2" value={form.address2}
+                onChange={(e) => setForm({ ...form, address2: e.target.value })} />
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Input
-                  label="City"
-                  required
-                  value={form.city}
-                  onChange={(e) => setForm({ ...form, city: e.target.value })}
-                />
-                <Input
-                  label="State"
-                  required
-                  value={form.state}
-                  onChange={(e) => setForm({ ...form, state: e.target.value })}
-                />
-                <Input
-                  label="Pincode"
-                  required
-                  value={form.pincode}
-                  onChange={(e) => setForm({ ...form, pincode: e.target.value })}
-                />
+                <Input label="City" required value={form.city}
+                  onChange={(e) => setForm({ ...form, city: e.target.value })} />
+                <Input label="State" required value={form.state}
+                  onChange={(e) => setForm({ ...form, state: e.target.value })} />
+                <Input label="Pincode" required value={form.pincode}
+                  onChange={(e) => setForm({ ...form, pincode: e.target.value })} />
               </div>
+
+              <label className="flex items-center gap-2 cursor-pointer select-none mt-2">
+                <input
+                  type="checkbox"
+                  checked={saveAddress}
+                  onChange={(e) => setSaveAddress(e.target.checked)}
+                  className="w-4 h-4 accent-[#2D5A27]"
+                />
+                <span className="text-sm text-[#6B4423]">
+                  {hasSavedAddress ? 'Update saved address' : 'Save this address for next time'}
+                </span>
+              </label>
             </div>
 
             <h2 className="font-semibold text-[#6B4423] mt-8 mb-4">Payment Method</h2>
             <div className="space-y-3">
               {paymentMethods.map((pm) => (
-                <label
-                  key={pm.id}
+                <label key={pm.id}
                   className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors ${
                     payment === pm.id ? 'border-[#2D5A27] bg-[#E8F0E8]' : 'border-[#8B7355]/20 hover:border-[#8B7355]/40'
                   }`}
                 >
-                  <input
-                    type="radio"
-                    name="payment"
-                    value={pm.id}
-                    checked={payment === pm.id}
-                    onChange={() => setPayment(pm.id)}
-                    className="sr-only"
-                  />
+                  <input type="radio" name="payment" value={pm.id} checked={payment === pm.id}
+                    onChange={() => setPayment(pm.id)} className="sr-only" />
                   <pm.icon className="w-5 h-5 text-[#2D5A27]" />
                   <span className="font-medium text-[#6B4423]">{pm.label}</span>
                 </label>
@@ -270,8 +287,7 @@ function Checkout() {
               </div>
               <div className="border-t border-[#8B7355]/20 pt-4 space-y-2 text-sm">
                 <div className="flex justify-between text-[#6B4423]">
-                  <span>Subtotal</span>
-                  <span>{formatPrice(subtotal)}</span>
+                  <span>Subtotal</span><span>{formatPrice(subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-[#6B4423]">
                   <span>Shipping</span>
@@ -279,8 +295,7 @@ function Checkout() {
                 </div>
               </div>
               <div className="flex justify-between font-semibold text-[#2D5A27] mt-4 pt-4 border-t border-[#8B7355]/20">
-                <span>Total</span>
-                <span>{formatPrice(total)}</span>
+                <span>Total</span><span>{formatPrice(total)}</span>
               </div>
               <Button type="submit" variant="primary" className="w-full mt-6" size="lg" disabled={submitting}>
                 {submitting ? 'Opening Payment…' : 'Place Order'}

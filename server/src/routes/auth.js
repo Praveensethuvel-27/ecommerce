@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import { User } from '../models/User.js';
 import { signAccessToken } from '../utils/jwt.js';
+import { requireAuth } from '../middleware/auth.js';
 
 export const authRouter = express.Router();
 
@@ -49,3 +50,18 @@ authRouter.post('/login', async (req, res) => {
   });
 });
 
+// GET saved address for logged-in user
+authRouter.get('/address', requireAuth, async (req, res) => {
+  const user = await User.findById(req.user.id).lean();
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  return res.json({ address: user.savedAddress || {} });
+});
+
+// SAVE address for logged-in user
+authRouter.post('/address', requireAuth, async (req, res) => {
+  const { name, phone, address1, address2, city, state, pincode } = req.body || {};
+  await User.findByIdAndUpdate(req.user.id, {
+    savedAddress: { name, phone, address1, address2, city, state, pincode },
+  });
+  return res.json({ ok: true });
+});

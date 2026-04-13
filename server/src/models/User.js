@@ -9,9 +9,17 @@ const userSchema = new mongoose.Schema(
     blockType: { type: String, enum: ['permanent', 'temporary'], default: null },
     blockReason: { type: String, default: '' },
     blockedAt: { type: Date, default: null },
+    savedAddress: {
+      name: { type: String, default: '' },
+      phone: { type: String, default: '' },
+      address1: { type: String, default: '' },
+      address2: { type: String, default: '' },
+      city: { type: String, default: '' },
+      state: { type: String, default: '' },
+      pincode: { type: String, default: '' },
+    },
   },
   { timestamps: true }
 );
 
 export const User = mongoose.model('User', userSchema);
-

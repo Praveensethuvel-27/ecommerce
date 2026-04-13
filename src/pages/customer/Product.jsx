@@ -26,74 +26,72 @@ function Product() {
   const [allProducts, setAllProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [addedToCart, setAddedToCart] = useState(false);
 
+  // Fetch current product
   useEffect(() => {
     let active = true;
-    Promise.resolve().then(() => {
-      if (!active) return;
-      setLoading(true);
-      setError('');
-      setProduct(null);
-    });
+    setLoading(true);
+    setError('');
+    setProduct(null);
     getProductBySlug(productSlug)
-      .then((p) => {
-        if (!active) return;
-        setError('');
-        setProduct(p);
-      })
-      .catch((err) => {
-        if (active) setError(err?.message || 'Failed to load product');
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
+      .then((p) => { if (active) { setProduct(p); setError(''); } })
+      .catch((err) => { if (active) setError(err?.message || 'Failed to load product'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [productSlug]);
 
+  // Fetch all products — re-fetch when productSlug changes so related is always fresh
   useEffect(() => {
     let active = true;
     getProducts()
-      .then((list) => {
-        if (active) setAllProducts(Array.isArray(list) ? list : []);
-      })
+      .then((list) => { if (active) setAllProducts(Array.isArray(list) ? list : []); })
       .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
+    return () => { active = false; };
+  }, [productSlug]);
 
+  // Reset weight when product changes
   useEffect(() => {
     if (product?.weightOptions?.length > 0) {
       setSelectedWeight(product.weightOptions[0].weight);
     } else {
       setSelectedWeight('');
     }
+    setAddedToCart(false);
+    setQuantity(1);
   }, [product?.id]);
 
+  // Realtime updates
   useEffect(() => {
     const unsub = subscribeProductsChanged((evt) => {
-      // Keep the current product fresh if it changes
       if (evt?.type === 'updated' || evt?.type === 'deleted') {
         if (evt?.id && product?.id && evt.id !== product.id) return;
       }
-      getProductBySlug(productSlug)
-        .then(setProduct)
-        .catch(() => {});
-      getProducts()
-        .then((list) => setAllProducts(Array.isArray(list) ? list : []))
-        .catch(() => {});
+      getProductBySlug(productSlug).then(setProduct).catch(() => {});
+      getProducts().then((list) => setAllProducts(Array.isArray(list) ? list : [])).catch(() => {});
     });
     return unsub;
   }, [productSlug, product?.id]);
 
   const category = product ? categories.find((c) => c.id === product.categoryId) : null;
+
+  // Related: same category, exclude current, max 4
   const relatedProducts = product
-    ? allProducts.filter((p) => p.categoryId === product.categoryId && p.id !== product.id).slice(0, 4)
+    ? allProducts
+        .filter((p) => p.categoryId === product.categoryId && p.id !== product.id)
+        .slice(0, 4)
     : [];
 
-  // Get translated product name
+  // If less than 4 related in same category, fill with other categories
+  const extraProducts =
+    relatedProducts.length < 4 && product
+      ? allProducts
+          .filter((p) => p.categoryId !== product.categoryId && p.id !== product.id)
+          .slice(0, 4 - relatedProducts.length)
+      : [];
+
+  const displayedRelated = [...relatedProducts, ...extraProducts];
+
   const getProductName = () => {
     const productKeyMap = {
       'nalangu-maavu': 'product.nalanguMaavu',
@@ -114,7 +112,6 @@ function Product() {
     return key ? t(key) : product?.name || '';
   };
 
-  // Get translated category name
   const getCategoryName = (cat) => {
     const categoryKeyMap = {
       'maavus': 'category.maavus',
@@ -126,7 +123,6 @@ function Product() {
     return key ? t(key) : cat?.name || '';
   };
 
-  // Get translated health benefit
   const getTranslatedBenefit = (benefit) => {
     const benefitKeyMap = {
       'Natural skin nourishment': 'benefit.naturalSkinNourishment',
@@ -206,6 +202,8 @@ function Product() {
 
   const handleAddToCart = () => {
     addItem(product.id, quantity, weightOptions ? selectedWeight : '');
+    setAddedToCart(true);
+    setTimeout(() => setAddedToCart(false), 2000);
   };
 
   return (
@@ -274,9 +272,7 @@ function Product() {
                 >
                   <option value="">Select weight</option>
                   {weightOptions.map((wo) => (
-                    <option key={wo.weight} value={wo.weight}>
-                      {wo.weight}
-                    </option>
+                    <option key={wo.weight} value={wo.weight}>{wo.weight}</option>
                   ))}
                 </select>
               </div>
@@ -288,7 +284,7 @@ function Product() {
               onClick={handleAddToCart}
               disabled={weightOptions && weightOptions.length > 0 && !selectedWeight}
             >
-              {t('common.addToCart')}
+              {addedToCart ? '✓ Added!' : t('common.addToCart')}
             </Button>
           </div>
 
@@ -305,11 +301,22 @@ function Product() {
         </div>
       </div>
 
-      {relatedProducts.length > 0 && (
-        <section>
-          <h2 className="text-2xl font-bold text-[#6B4423] mb-6">{t('product.relatedProducts')}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {relatedProducts.map((p) => (
+      {/* Related Products */}
+      {displayedRelated.length > 0 && (
+        <section className="border-t border-[#8B7355]/10 pt-12">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-[#6B4423]">
+              {relatedProducts.length > 0 ? t('product.relatedProducts') : 'You May Also Like'}
+            </h2>
+            <Link
+              to={category ? `/shop/${category.slug}` : '/shop'}
+              className="text-sm text-[#2D5A27] hover:underline font-medium"
+            >
+              View all →
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            {displayedRelated.map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}
           </div>
