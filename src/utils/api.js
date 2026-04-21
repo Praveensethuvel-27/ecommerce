@@ -207,3 +207,56 @@ export async function getRestockSubscriberCount(productId) {
     headers: { Authorization: `Bearer ${getToken()}` },
   });
 }
+// ─── Offers API ───────────────────────────────────────────────────────────────
+
+// Public: get active offers (website + app display)
+export async function getActiveOffers() {
+  return request('/api/offers');
+}
+
+// Admin: get all offers (including inactive/expired)
+export async function adminGetOffers() {
+  return request('/api/offers/admin', {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+}
+
+// Admin: create offer
+export async function adminCreateOffer(data) {
+  return request('/api/offers', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getToken()}`,
+    },
+    body: JSON.stringify(data),
+  });
+}
+
+// Admin: update offer
+export async function adminUpdateOffer(id, data) {
+  return request(`/api/offers/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getToken()}`,
+    },
+    body: JSON.stringify(data),
+  });
+}
+
+// Admin: toggle active/inactive
+export async function adminToggleOffer(id) {
+  return request(`/api/offers/${encodeURIComponent(id)}/toggle`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+}
+
+// Admin: delete offer
+export async function adminDeleteOffer(id) {
+  return request(`/api/offers/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+}
