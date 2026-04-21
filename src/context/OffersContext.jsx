@@ -23,11 +23,26 @@ export function useOffers() {
   return useContext(OffersContext);
 }
 
-// Helper: get the best active offer for a product name (case-insensitive match)
-export function getOfferForProduct(offers, productName) {
-  if (!offers?.length || !productName) return null;
-  const lower = productName.toLowerCase();
-  return offers.find(
-    (o) => o.productName && lower.includes(o.productName.toLowerCase())
-  ) || null;
+// Helper: get the best active offer for a product — matches by name OR slug
+export function getOfferForProduct(offers, productName, productSlug) {
+  if (!offers?.length) return null;
+
+  return offers.find((o) => {
+    if (!o.productName) return false;
+    const offerName = o.productName.toLowerCase().trim();
+
+    // name match (both directions)
+    if (productName) {
+      const name = productName.toLowerCase().trim();
+      if (name.includes(offerName) || offerName.includes(name)) return true;
+    }
+
+    // slug match — convert "kasturi-manjal-image" → "kasturi manjal image"
+    if (productSlug) {
+      const slugAsName = productSlug.toLowerCase().replace(/-/g, ' ').trim();
+      if (slugAsName.includes(offerName) || offerName.includes(slugAsName)) return true;
+    }
+
+    return false;
+  }) || null;
 }

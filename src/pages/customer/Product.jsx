@@ -50,8 +50,12 @@ function TimerBox({ value, label }) {
 }
 
 function OfferBanner({ offer }) {
-  const time = useCountdown(offer.endDate);
-  if (!time) return null;
+  // Support both endDate and end_date field names from API
+  const endDate = offer.endDate || offer.end_date || null;
+  const time = useCountdown(endDate);
+
+  // Hide only if endDate exists and has expired
+  if (endDate && !time) return null;
 
   return (
     <div className="relative overflow-hidden rounded-2xl bg-[#2D5A27] text-white px-5 py-4 mb-6 flex items-center justify-between gap-3">
@@ -69,16 +73,20 @@ function OfferBanner({ offer }) {
         )}
       </div>
       <div className="z-10 flex-shrink-0 flex flex-col items-end gap-1.5">
-        <div className="flex items-center gap-1">
-          <Clock className="w-3 h-3 text-white/50" />
-          <span className="text-[10px] text-white/50">Ends in</span>
-        </div>
-        <div className="flex gap-1">
-          {time.d > 0 && <TimerBox value={time.d} label="days" />}
-          <TimerBox value={time.h} label="hrs" />
-          <TimerBox value={time.m} label="min" />
-          <TimerBox value={time.s} label="sec" />
-        </div>
+        {endDate && time && (
+          <>
+            <div className="flex items-center gap-1">
+              <Clock className="w-3 h-3 text-white/50" />
+              <span className="text-[10px] text-white/50">Ends in</span>
+            </div>
+            <div className="flex gap-1">
+              {time.d > 0 && <TimerBox value={time.d} label="days" />}
+              <TimerBox value={time.h} label="hrs" />
+              <TimerBox value={time.m} label="min" />
+              <TimerBox value={time.s} label="sec" />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -147,8 +155,8 @@ function Product() {
     ? allProducts.filter((p) => p.categoryId === product.categoryId && p.id !== product.id).slice(0, 4)
     : [];
 
-  // Offer matching
-  const offer = product ? getOfferForProduct(offers, product.name) : null;
+  // Offer matching — name + slug both used
+  const offer = product ? getOfferForProduct(offers, product.name, productSlug) : null;
 
   const getProductName = () => {
     const productKeyMap = {

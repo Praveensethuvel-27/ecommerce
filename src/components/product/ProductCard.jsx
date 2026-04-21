@@ -9,8 +9,8 @@ function ProductCard({ product }) {
   const { offers } = useOffers();
   const hasDiscount = product.originalPrice && product.originalPrice > product.price;
 
-  // Match offer to this product by name
-  const offer = getOfferForProduct(offers, product.name);
+  // Match offer by name + slug
+  const offer = getOfferForProduct(offers, product.name, product.slug);
 
   return (
     <Link
