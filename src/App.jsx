@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { CartProvider } from './context/CartContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { OffersProvider } from './context/OffersContext';
 import MainLayout from './components/layout/MainLayout';
 
 import Home from './pages/customer/Home';
@@ -55,52 +56,53 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <CartProvider>
-          <Routes>
-            <Route path="/admin/login" element={<AdminLogin />} />
+          <OffersProvider>
+            <Routes>
+              <Route path="/admin/login" element={<AdminLogin />} />
 
-            {/* Driver portal — standalone, no admin/customer layout */}
-            <Route path="/driver/login" element={<DriverLogin />} />
-            <Route path="/driver/scan" element={<DriverApp />} />
+              <Route path="/driver/login" element={<DriverLogin />} />
+              <Route path="/driver/scan" element={<DriverApp />} />
 
-            <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminLayout /></ProtectedRoute>}>
-              <Route index element={<AdminDashboard />} />
-              <Route path="products" element={<AdminProducts />} />
-              <Route path="orders" element={<AdminOrders />} />
-              <Route path="customers" element={<AdminCustomers />} />
-              <Route path="customers/blocked" element={<AdminBlockedUsers />} />
-              <Route path="categories" element={<AdminCategories />} />
-              <Route path="drivers" element={<AdminDrivers />} />
-              <Route path="reports" element={<AdminReports />} />
-              <Route path="settings" element={<AdminSettings />} />
-              <Route path="notifications" element={<AdminNotifications />} />
-              <Route path="offers" element={<AdminOffers />} />
-            </Route>
-
-            <Route path="/" element={<MainLayout />}>
-              <Route index element={<Home />} />
-              <Route path="shop" element={<Shop />} />
-              <Route path="shop/:categorySlug" element={<Category />} />
-              <Route path="product/:productSlug" element={<Product />} />
-              <Route path="cart" element={<Cart />} />
-              <Route path="checkout" element={<Checkout />} />
-              <Route path="login" element={<Login />} />
-              <Route path="register" element={<Register />} />
-              <Route path="about" element={<About />} />
-              <Route path="contact" element={<Contact />} />
-              <Route path="faq" element={<FAQ />} />
-              <Route path="track-order" element={<OrderTracking />} />
-
-              <Route path="account" element={<ProtectedRoute><AccountLayout /></ProtectedRoute>}>
-                <Route index element={<AccountDashboard />} />
-                <Route path="orders" element={<AccountOrders />} />
-                <Route path="profile" element={<AccountProfile />} />
-                <Route path="addresses" element={<AccountAddresses />} />
-                <Route path="tracking" element={<AccountTracking />} />
+              <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminLayout /></ProtectedRoute>}>
+                <Route index element={<AdminDashboard />} />
+                <Route path="products" element={<AdminProducts />} />
+                <Route path="orders" element={<AdminOrders />} />
+                <Route path="customers" element={<AdminCustomers />} />
+                <Route path="customers/blocked" element={<AdminBlockedUsers />} />
+                <Route path="categories" element={<AdminCategories />} />
+                <Route path="drivers" element={<AdminDrivers />} />
+                <Route path="reports" element={<AdminReports />} />
+                <Route path="settings" element={<AdminSettings />} />
+                <Route path="notifications" element={<AdminNotifications />} />
+                <Route path="offers" element={<AdminOffers />} />
               </Route>
-            </Route>
 
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+              <Route path="/" element={<MainLayout />}>
+                <Route index element={<Home />} />
+                <Route path="shop" element={<Shop />} />
+                <Route path="shop/:categorySlug" element={<Category />} />
+                <Route path="product/:productSlug" element={<Product />} />
+                <Route path="cart" element={<Cart />} />
+                <Route path="checkout" element={<Checkout />} />
+                <Route path="login" element={<Login />} />
+                <Route path="register" element={<Register />} />
+                <Route path="about" element={<About />} />
+                <Route path="contact" element={<Contact />} />
+                <Route path="faq" element={<FAQ />} />
+                <Route path="track-order" element={<OrderTracking />} />
+
+                <Route path="account" element={<ProtectedRoute><AccountLayout /></ProtectedRoute>}>
+                  <Route index element={<AccountDashboard />} />
+                  <Route path="orders" element={<AccountOrders />} />
+                  <Route path="profile" element={<AccountProfile />} />
+                  <Route path="addresses" element={<AccountAddresses />} />
+                  <Route path="tracking" element={<AccountTracking />} />
+                </Route>
+              </Route>
+
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </OffersProvider>
         </CartProvider>
       </AuthProvider>
     </BrowserRouter>

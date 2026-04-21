@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Leaf, Shield, Bell, CheckCircle } from 'lucide-react';
+import { Leaf, Shield, Bell, CheckCircle, Tag, Clock } from 'lucide-react';
 import { categories } from '../../data/categories';
 import { useCart } from '../../context/CartContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -14,6 +14,75 @@ import Badge from '../../components/common/Badge';
 import { AccordionItem } from '../../components/common/Accordion';
 import { getProductBySlug, getProducts, subscribeRestock } from '../../utils/api';
 import { subscribeProductsChanged } from '../../utils/realtime';
+import { useOffers, getOfferForProduct } from '../../context/OffersContext';
+
+// ---------- Countdown Timer ----------
+function useCountdown(endDate) {
+  const calc = () => {
+    if (!endDate) return null;
+    const diff = new Date(endDate) - new Date();
+    if (diff <= 0) return null;
+    return {
+      d: Math.floor(diff / 86400000),
+      h: Math.floor((diff % 86400000) / 3600000),
+      m: Math.floor((diff % 3600000) / 60000),
+      s: Math.floor((diff % 60000) / 1000),
+    };
+  };
+  const [time, setTime] = useState(calc);
+  useEffect(() => {
+    if (!endDate) return;
+    const id = setInterval(() => setTime(calc()), 1000);
+    return () => clearInterval(id);
+  }, [endDate]);
+  return time;
+}
+
+function TimerBox({ value, label }) {
+  return (
+    <div className="bg-black/25 rounded-lg px-2.5 py-1.5 text-center min-w-[44px]">
+      <span className="block text-base font-black leading-none tabular-nums text-white">
+        {String(value).padStart(2, '0')}
+      </span>
+      <span className="text-[9px] text-white/60 uppercase">{label}</span>
+    </div>
+  );
+}
+
+function OfferBanner({ offer }) {
+  const time = useCountdown(offer.endDate);
+  if (!time) return null;
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl bg-[#2D5A27] text-white px-5 py-4 mb-6 flex items-center justify-between gap-3">
+      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-7xl font-black text-white/5 select-none pointer-events-none leading-none">
+        {offer.discountPercent}%
+      </div>
+      <div className="z-10 flex-1 min-w-0">
+        <div className="inline-flex items-center gap-1 bg-white/20 rounded-full px-2.5 py-0.5 text-xs font-semibold mb-1">
+          <Tag className="w-3 h-3" />
+          {offer.discountPercent}% OFF
+        </div>
+        <p className="font-bold text-sm leading-tight">{offer.title}</p>
+        {offer.description && (
+          <p className="text-xs text-white/65 mt-0.5 line-clamp-1">{offer.description}</p>
+        )}
+      </div>
+      <div className="z-10 flex-shrink-0 flex flex-col items-end gap-1.5">
+        <div className="flex items-center gap-1">
+          <Clock className="w-3 h-3 text-white/50" />
+          <span className="text-[10px] text-white/50">Ends in</span>
+        </div>
+        <div className="flex gap-1">
+          {time.d > 0 && <TimerBox value={time.d} label="days" />}
+          <TimerBox value={time.h} label="hrs" />
+          <TimerBox value={time.m} label="min" />
+          <TimerBox value={time.s} label="sec" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function Product() {
   const { productSlug } = useParams();
@@ -21,13 +90,14 @@ function Product() {
   const [selectedWeight, setSelectedWeight] = useState('');
   const { addItem } = useCart();
   const { t } = useLanguage();
+  const { offers } = useOffers();
 
   const [product, setProduct] = useState(null);
   const [allProducts, setAllProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notifyEmail, setNotifyEmail] = useState('');
-  const [notifyStatus, setNotifyStatus] = useState('idle'); // idle | loading | success | error
+  const [notifyStatus, setNotifyStatus] = useState('idle');
   const [notifyError, setNotifyError] = useState('');
 
   useEffect(() => {
@@ -39,32 +109,18 @@ function Product() {
       setProduct(null);
     });
     getProductBySlug(productSlug)
-      .then((p) => {
-        if (!active) return;
-        setError('');
-        setProduct(p);
-      })
-      .catch((err) => {
-        if (active) setError(err?.message || 'Failed to load product');
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
+      .then((p) => { if (!active) return; setError(''); setProduct(p); })
+      .catch((err) => { if (active) setError(err?.message || 'Failed to load product'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [productSlug]);
 
   useEffect(() => {
     let active = true;
     getProducts()
-      .then((list) => {
-        if (active) setAllProducts(Array.isArray(list) ? list : []);
-      })
+      .then((list) => { if (active) setAllProducts(Array.isArray(list) ? list : []); })
       .catch(() => {});
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
@@ -77,16 +133,11 @@ function Product() {
 
   useEffect(() => {
     const unsub = subscribeProductsChanged((evt) => {
-      // Keep the current product fresh if it changes
       if (evt?.type === 'updated' || evt?.type === 'deleted') {
         if (evt?.id && product?.id && evt.id !== product.id) return;
       }
-      getProductBySlug(productSlug)
-        .then(setProduct)
-        .catch(() => {});
-      getProducts()
-        .then((list) => setAllProducts(Array.isArray(list) ? list : []))
-        .catch(() => {});
+      getProductBySlug(productSlug).then(setProduct).catch(() => {});
+      getProducts().then((list) => setAllProducts(Array.isArray(list) ? list : [])).catch(() => {});
     });
     return unsub;
   }, [productSlug, product?.id]);
@@ -96,7 +147,9 @@ function Product() {
     ? allProducts.filter((p) => p.categoryId === product.categoryId && p.id !== product.id).slice(0, 4)
     : [];
 
-  // Get translated product name
+  // Offer matching
+  const offer = product ? getOfferForProduct(offers, product.name) : null;
+
   const getProductName = () => {
     const productKeyMap = {
       'nalangu-maavu': 'product.nalanguMaavu',
@@ -117,7 +170,6 @@ function Product() {
     return key ? t(key) : product?.name || '';
   };
 
-  // Get translated category name
   const getCategoryName = (cat) => {
     const categoryKeyMap = {
       'maavus': 'category.maavus',
@@ -129,7 +181,6 @@ function Product() {
     return key ? t(key) : cat?.name || '';
   };
 
-  // Get translated health benefit
   const getTranslatedBenefit = (benefit) => {
     const benefitKeyMap = {
       'Natural skin nourishment': 'benefit.naturalSkinNourishment',
@@ -241,6 +292,10 @@ function Product() {
             <Badge variant="default">{t('product.traditional')}</Badge>
           </div>
           <h1 className="text-3xl font-bold text-[#6B4423] mb-4">{getProductName()}</h1>
+
+          {/* ── OFFER BANNER ── */}
+          {offer && <OfferBanner offer={offer} />}
+
           <div className="flex items-center gap-3 mb-6">
             <span className="text-2xl font-bold text-[#2D5A27]">{formatPrice(displayPrice)}</span>
             {product.originalPrice && (
@@ -249,6 +304,7 @@ function Product() {
               </span>
             )}
           </div>
+
           <p className="text-[#8B7355] mb-6">{product.description}</p>
 
           <div className="mb-6">
@@ -281,7 +337,6 @@ function Product() {
           </div>
 
           {product.stock <= 0 ? (
-            /* ── OUT OF STOCK — Notify Me Box ── */
             <div className="mt-8">
               <div className="inline-block px-3 py-1 rounded-full bg-red-100 text-red-700 text-sm font-medium mb-4">
                 Out of Stock
@@ -311,11 +366,7 @@ function Product() {
                       onChange={(e) => setNotifyEmail(e.target.value)}
                       className="flex-1 px-4 py-2.5 rounded-xl border border-[#8B7355]/30 bg-white text-[#6B4423] focus:outline-none focus:border-[#2D5A27]"
                     />
-                    <Button
-                      type="submit"
-                      variant="primary"
-                      disabled={notifyStatus === 'loading'}
-                    >
+                    <Button type="submit" variant="primary" disabled={notifyStatus === 'loading'}>
                       {notifyStatus === 'loading' ? 'Subscribing…' : 'Notify Me'}
                     </Button>
                   </form>
@@ -326,7 +377,6 @@ function Product() {
               </div>
             </div>
           ) : (
-            /* ── IN STOCK — Normal Add to Cart ── */
             <div className="mt-8 flex flex-wrap items-center gap-4">
               {weightOptions && (
                 <div>
@@ -339,9 +389,7 @@ function Product() {
                   >
                     <option value="">Select weight</option>
                     {weightOptions.map((wo) => (
-                      <option key={wo.weight} value={wo.weight}>
-                        {wo.weight}
-                      </option>
+                      <option key={wo.weight} value={wo.weight}>{wo.weight}</option>
                     ))}
                   </select>
                 </div>

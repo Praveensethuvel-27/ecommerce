@@ -2,10 +2,15 @@ import { Link } from 'react-router-dom';
 import { formatPrice } from '../../utils/formatPrice';
 import { useLanguage } from '../../context/LanguageContext';
 import Badge from '../common/Badge';
+import { useOffers, getOfferForProduct } from '../../context/OffersContext';
 
 function ProductCard({ product }) {
   const { t } = useLanguage();
+  const { offers } = useOffers();
   const hasDiscount = product.originalPrice && product.originalPrice > product.price;
+
+  // Match offer to this product by name
+  const offer = getOfferForProduct(offers, product.name);
 
   return (
     <Link
@@ -24,16 +29,31 @@ function ProductCard({ product }) {
             {product.name.charAt(0)}
           </div>
         )}
-        {hasDiscount && (
+
+        {/* Offer badge — top left */}
+        {offer ? (
+          <span className="absolute top-2 left-2 bg-[#2D5A27] text-white text-xs font-bold px-2.5 py-1 rounded-full shadow">
+            {offer.discountPercent}% OFF
+          </span>
+        ) : hasDiscount ? (
           <Badge variant="primary" className="absolute top-2 left-2">
             {t('common.sale')}
           </Badge>
-        )}
+        ) : null}
       </div>
+
       <div className="p-4">
         <h3 className="font-semibold text-[#6B4423] group-hover:text-[#2D5A27] transition-colors line-clamp-2">
           {product.name}
         </h3>
+
+        {/* Offer title under product name */}
+        {offer && (
+          <p className="text-xs text-[#2D5A27] font-medium mt-0.5 truncate">
+            🏷 {offer.title}
+          </p>
+        )}
+
         <div className="mt-2 flex items-center gap-2">
           <span className="text-lg font-bold text-[#2D5A27]">
             {product.weightOptions?.length > 1
@@ -48,6 +68,7 @@ function ProductCard({ product }) {
             </span>
           )}
         </div>
+
         {product.rating && (
           <p className="mt-1 text-sm text-[#8B7355]">
             {product.rating} ({product.reviewCount} reviews)
