@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Package, ShoppingCart, Users, FolderTree, BarChart3, Settings, LogOut, Menu, X, Bell, Truck } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, Users, FolderTree, BarChart3, Settings, LogOut, Menu, X, Bell, Truck, Tag } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
 
@@ -10,6 +10,7 @@ const navItems = [
   { to: '/admin/orders', label: 'Orders', icon: ShoppingCart, end: false },
   { to: '/admin/customers', label: 'Customers', icon: Users, end: false },
   { to: '/admin/categories', label: 'Categories', icon: FolderTree, end: false },
+  { to: '/admin/offers', label: 'Offers', icon: Tag, end: false },
   { to: '/admin/drivers', label: 'Drivers', icon: Truck, end: false },
   { to: '/admin/reports', label: 'Reports', icon: BarChart3, end: false },
   { to: '/admin/notifications', label: 'Notifications', icon: Bell, end: false, badge: true },
@@ -86,7 +87,6 @@ function AdminSidebar() {
 
   return (
     <>
-      {/* Mobile Hamburger Button */}
       <button
         className="md:hidden fixed top-4 left-4 z-50 bg-[#2D5A27] text-white p-2 rounded-lg shadow-lg"
         onClick={() => setMobileOpen(true)}
@@ -94,7 +94,6 @@ function AdminSidebar() {
         <Menu className="w-5 h-5" />
       </button>
 
-      {/* Mobile Overlay */}
       {mobileOpen && (
         <div
           className="md:hidden fixed inset-0 bg-black/50 z-40"
@@ -102,7 +101,6 @@ function AdminSidebar() {
         />
       )}
 
-      {/* Mobile Drawer */}
       <aside
         className={`md:hidden fixed top-0 left-0 h-full w-64 bg-[#2D5A27] text-white z-50 flex flex-col transform transition-transform duration-300 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
@@ -111,7 +109,6 @@ function AdminSidebar() {
         <SidebarInner showClose={true} />
       </aside>
 
-      {/* Desktop Sidebar */}
       <aside className="hidden md:flex w-64 flex-shrink-0 bg-[#2D5A27] text-white min-h-screen flex-col">
         <SidebarInner showClose={false} />
       </aside>
