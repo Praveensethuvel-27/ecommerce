@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Package, ShoppingCart, Users, FolderTree, BarChart3, Settings, LogOut, Menu, X, Bell, Truck, Tag } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, Users, FolderTree, BarChart3, Settings, LogOut, Menu, X, Bell, Truck, Tag, Star } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
 
@@ -11,6 +11,7 @@ const navItems = [
   { to: '/admin/customers', label: 'Customers', icon: Users, end: false },
   { to: '/admin/categories', label: 'Categories', icon: FolderTree, end: false },
   { to: '/admin/offers', label: 'Offers', icon: Tag, end: false },
+  { to: '/admin/reviews', label: 'Reviews', icon: Star, end: false },
   { to: '/admin/drivers', label: 'Drivers', icon: Truck, end: false },
   { to: '/admin/reports', label: 'Reports', icon: BarChart3, end: false },
   { to: '/admin/notifications', label: 'Notifications', icon: Bell, end: false, badge: true },

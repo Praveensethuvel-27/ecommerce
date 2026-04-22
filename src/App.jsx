@@ -38,6 +38,7 @@ import AdminLogin from './pages/admin/AdminLogin';
 import AdminNotifications from './pages/admin/AdminNotifications';
 import AdminDrivers from './pages/admin/AdminDrivers';
 import AdminOffers from './pages/admin/AdminOffers';
+import AdminReviews from './pages/admin/AdminReviews';
 import DriverLogin from './pages/driver/DriverLogin';
 import DriverApp from './pages/driver/DriverApp';
 
@@ -75,6 +76,7 @@ function App() {
                 <Route path="settings" element={<AdminSettings />} />
                 <Route path="notifications" element={<AdminNotifications />} />
                 <Route path="offers" element={<AdminOffers />} />
+              <Route path="reviews" element={<AdminReviews />} />
               </Route>
 
               <Route path="/" element={<MainLayout />}>
