@@ -15,6 +15,7 @@ import { AccordionItem } from '../../components/common/Accordion';
 import { getProductBySlug, getProducts, subscribeRestock } from '../../utils/api';
 import { subscribeProductsChanged } from '../../utils/realtime';
 import { useOffers, getOfferForProduct } from '../../context/OffersContext';
+import ProductReviews from '../../components/product/ProductReviews';
 
 // ---------- Countdown Timer ----------
 function useCountdown(endDate) {
@@ -50,11 +51,8 @@ function TimerBox({ value, label }) {
 }
 
 function OfferBanner({ offer }) {
-  // Support both endDate and end_date field names from API
   const endDate = offer.endDate || offer.end_date || null;
   const time = useCountdown(endDate);
-
-  // Hide only if endDate exists and has expired
   if (endDate && !time) return null;
 
   return (
@@ -155,7 +153,6 @@ function Product() {
     ? allProducts.filter((p) => p.categoryId === product.categoryId && p.id !== product.id).slice(0, 4)
     : [];
 
-  // Offer matching — name + slug both used
   const offer = product ? getOfferForProduct(offers, product.name, productSlug) : null;
 
   const getProductName = () => {
@@ -427,6 +424,7 @@ function Product() {
         </div>
       </div>
 
+      {/* ── Related Products ── */}
       {relatedProducts.length > 0 && (
         <section>
           <h2 className="text-2xl font-bold text-[#6B4423] mb-6">{t('product.relatedProducts')}</h2>
@@ -437,6 +435,10 @@ function Product() {
           </div>
         </section>
       )}
+
+      {/* ── Customer Reviews ── */}
+      <ProductReviews productId={product.id} />
+
     </div>
   );
 }
