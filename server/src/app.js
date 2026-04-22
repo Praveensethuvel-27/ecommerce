@@ -11,6 +11,7 @@ import { customersRouter } from './routes/customers.js';
 import { driverRouter } from './routes/driver.js';
 import { restockRouter } from './routes/restock.js';
 import { offersRouter } from './routes/offers.js';
+import { reviewRouter } from './routes/reviews.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,6 +37,7 @@ export function createApp() {
   app.use('/api/driver', driverRouter);
   app.use('/api/restock', restockRouter);
   app.use('/api/offers', offersRouter);
+  app.use('/api/reviews', reviewRouter);
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, _req, res, _next) => {
