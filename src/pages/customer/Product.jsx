@@ -12,7 +12,6 @@ import Breadcrumb from '../../components/layout/Breadcrumb';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import { AccordionItem } from '../../components/common/Accordion';
-import ProductReviews from '../../components/product/ProductReviews';
 import { getProductBySlug, getProducts, subscribeRestock } from '../../utils/api';
 import { subscribeProductsChanged } from '../../utils/realtime';
 import { useOffers, getOfferForProduct } from '../../context/OffersContext';
@@ -438,10 +437,6 @@ function Product() {
           </div>
         </section>
       )}
-
-      {/* ── PRODUCT REVIEWS ── */}
-      <ProductReviews productId={product.id} productName={getProductName()} />
-
     </div>
   );
 }
