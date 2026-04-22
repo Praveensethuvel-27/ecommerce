@@ -66,7 +66,7 @@ reviewRouter.post('/', async (req, res) => {
 });
 
 // ── Admin: GET all reviews ────────────────────────────────────────────────────
-reviewRouter.get('/admin/all', requireAdmin, async (req, res) => {
+reviewRouter.get('/admin/all', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { status } = req.query;
     const filter = status && status !== 'all' ? { status } : {};
@@ -80,7 +80,7 @@ reviewRouter.get('/admin/all', requireAdmin, async (req, res) => {
 });
 
 // ── Admin: Approve ────────────────────────────────────────────────────────────
-reviewRouter.patch('/admin/:id/approve', requireAdmin, async (req, res) => {
+reviewRouter.patch('/admin/:id/approve', requireAuth, requireAdmin, async (req, res) => {
   try {
     const review = await Review.findByIdAndUpdate(
       req.params.id,
@@ -95,7 +95,7 @@ reviewRouter.patch('/admin/:id/approve', requireAdmin, async (req, res) => {
 });
 
 // ── Admin: Reject ─────────────────────────────────────────────────────────────
-reviewRouter.patch('/admin/:id/reject', requireAdmin, async (req, res) => {
+reviewRouter.patch('/admin/:id/reject', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { adminNote } = req.body;
     const review = await Review.findByIdAndUpdate(
@@ -111,7 +111,7 @@ reviewRouter.patch('/admin/:id/reject', requireAdmin, async (req, res) => {
 });
 
 // ── Admin: Delete ─────────────────────────────────────────────────────────────
-reviewRouter.delete('/admin/:id', requireAdmin, async (req, res) => {
+reviewRouter.delete('/admin/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
     const review = await Review.findByIdAndDelete(req.params.id).lean();
     if (!review) return res.status(404).json({ error: 'Review not found' });
