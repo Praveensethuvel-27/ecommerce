@@ -27,6 +27,8 @@ function AdminProducts() {
     featured: false,
     images: [],
     weightOptions: [{ weight: '', price: '' }],
+    ingredients: '',
+    benefits: '',
   });
 
   const loadProducts = useCallback(async () => {
@@ -35,7 +37,6 @@ function AdminProducts() {
     try {
       const list = await getProducts();
       setProductList(Array.isArray(list) ? list : []);
-      // Load restock subscriber counts for out-of-stock products
       const outOfStock = (Array.isArray(list) ? list : []).filter((p) => p.stock <= 0);
       const counts = {};
       await Promise.allSettled(
@@ -84,6 +85,8 @@ function AdminProducts() {
       featured: !!product?.featured,
       images: [],
       weightOptions: wopts,
+      ingredients: product?.ingredients || '',
+      benefits: product?.benefits || '',
     });
   };
 
@@ -125,6 +128,8 @@ function AdminProducts() {
         : formatPrice(product.price)],
       ['Stock', String(product.stock)],
       ['Featured', product.featured ? 'Yes' : 'No'],
+      ['Ingredients', product.ingredients || '-'],
+      ['Benefits', product.benefits || '-'],
       ['ID', product.id],
     ];
 
@@ -195,6 +200,8 @@ function AdminProducts() {
     fd.append('description', form.description);
     fd.append('featured', String(form.featured));
     fd.append('weightOptions', JSON.stringify(validWeightOptions));
+    fd.append('ingredients', form.ingredients);
+    fd.append('benefits', form.benefits);
     if (Array.isArray(form.images) && form.images.length > 0) {
       form.images.forEach((file) => fd.append('images', file));
     }
@@ -376,6 +383,33 @@ function AdminProducts() {
               required
             />
           </div>
+
+          {/* Ingredients */}
+          <div>
+            <label className="block text-sm font-medium text-[#6B4423] mb-1">Ingredients</label>
+            <p className="text-xs text-[#8B7355] mb-2">List the key ingredients (e.g., Rose extract, Turmeric, Sandalwood...)</p>
+            <textarea
+              className="w-full px-4 py-2.5 rounded-xl border border-[#8B7355]/30 bg-white text-[#6B4423]"
+              rows={3}
+              placeholder="e.g., Rose extract, Turmeric, Sandalwood, Multani Mitti..."
+              value={form.ingredients}
+              onChange={(e) => setForm((f) => ({ ...f, ingredients: e.target.value }))}
+            />
+          </div>
+
+          {/* Benefits */}
+          <div>
+            <label className="block text-sm font-medium text-[#6B4423] mb-1">Benefits</label>
+            <p className="text-xs text-[#8B7355] mb-2">List the key benefits (e.g., Brightens skin, Reduces dark spots...)</p>
+            <textarea
+              className="w-full px-4 py-2.5 rounded-xl border border-[#8B7355]/30 bg-white text-[#6B4423]"
+              rows={3}
+              placeholder="e.g., Brightens skin, Reduces dark spots, Deep cleanses pores..."
+              value={form.benefits}
+              onChange={(e) => setForm((f) => ({ ...f, benefits: e.target.value }))}
+            />
+          </div>
+
           <div className="flex items-center gap-2">
             <input
               id="featured"

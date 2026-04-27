@@ -23,11 +23,6 @@ vi.mock('../../context/CartContext', () => ({
   useCart: () => useCartMock(),
 }));
 
-const createOrderMock = vi.fn();
-vi.mock('../../utils/api', () => ({
-  createOrder: (...args) => createOrderMock(...args),
-}));
-
 function getInputForLabel(labelText) {
   const label = screen.getByText(labelText);
   const wrapper = label.closest('div');
@@ -39,7 +34,41 @@ function getInputForLabel(labelText) {
 describe('Checkout flow', () => {
   beforeEach(() => {
     navigateMock.mockReset();
-    createOrderMock.mockReset();
+    vi.restoreAllMocks();
+
+    window.Razorpay = vi.fn().mockImplementation(function(options) {
+      return {
+        on: vi.fn(),
+        open: vi.fn(() => {
+          if (options.handler) {
+            options.handler({
+              razorpay_order_id: 'rzp_order_123',
+              razorpay_payment_id: 'rzp_pay_123',
+              razorpay_signature: 'sig_123',
+            });
+          }
+        }),
+      };
+    });
+
+    globalThis.fetch = vi.fn(async (url, opts) => {
+      if (url.includes('/api/auth/address') && !url.includes('POST')) {
+        return { ok: true, json: async () => ({}) };
+      }
+      if (url.includes('/api/orders/razorpay/create')) {
+        return {
+          ok: true,
+          json: async () => ({ orderId: 'ORD-123', amount: 2000, currency: 'INR', keyId: 'rzp_test_123' })
+        };
+      }
+      if (url.includes('/api/orders/razorpay/verify')) {
+        return {
+          ok: true,
+          json: async () => ({ orderId: 'ORD-123' })
+        };
+      }
+      return { ok: true, json: async () => ({}) };
+    });
   });
 
   it('prompts login when unauthenticated', () => {
@@ -73,7 +102,6 @@ describe('Checkout flow', () => {
       total: 20,
       clearCart,
     });
-    createOrderMock.mockResolvedValue({ orderId: 'ORD-123' });
 
     render(
       <MemoryRouter>
@@ -90,23 +118,18 @@ describe('Checkout flow', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /place order/i }));
 
-    expect(createOrderMock).toHaveBeenCalledWith({
-      items: [{ productId: 'p1', weight: undefined, quantity: 2 }],
-      address: expect.objectContaining({
-        name: 'Ada',
-        phone: '9999999999',
-        address1: '123 Street',
-        city: 'Pune',
-        state: 'MH',
-        pincode: '411001',
-      }),
-      paymentMethod: 'cod',
-    });
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/orders/razorpay/create'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ amount: 20 })
+      })
+    ));
 
     await waitFor(() => expect(clearCart).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(navigateMock).toHaveBeenCalledWith('/account/orders', {
-        state: { message: 'Order placed! Order ID: ORD-123' },
+      expect(navigateMock).toHaveBeenCalledWith('/track-order', {
+        state: { orderId: 'ORD-123', message: 'Order placed! Order ID: ORD-123' },
       }),
     );
   });
@@ -142,7 +165,15 @@ describe('Checkout flow', () => {
       total: 10,
       clearCart,
     });
-    createOrderMock.mockRejectedValue(new Error('Nope'));
+    
+    globalThis.fetch = vi.fn(async (url) => {
+      if (url.includes('/api/auth/address') && !url.includes('POST')) return { ok: true, json: async () => ({}) };
+      if (url.includes('/api/orders/razorpay/create')) {
+        return { ok: false, json: async () => ({ error: 'Nope' }) };
+      }
+      return { ok: true, json: async () => ({}) };
+    });
+
     const alertSpy = vi.spyOn(globalThis, 'alert').mockImplementation(() => {});
 
     render(
@@ -173,7 +204,15 @@ describe('Checkout flow', () => {
       total: 10,
       clearCart: vi.fn(),
     });
-    createOrderMock.mockRejectedValue({});
+    
+    globalThis.fetch = vi.fn(async (url) => {
+      if (url.includes('/api/auth/address') && !url.includes('POST')) return { ok: true, json: async () => ({}) };
+      if (url.includes('/api/orders/razorpay/create')) {
+        return { ok: false, json: async () => ({}) };
+      }
+      return { ok: true, json: async () => ({}) };
+    });
+
     const alertSpy = vi.spyOn(globalThis, 'alert').mockImplementation(() => {});
 
     render(
@@ -191,7 +230,7 @@ describe('Checkout flow', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /place order/i }));
 
-    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Failed to place order'));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Failed to create payment order'));
   });
 
   it('supports optional address line 2, weighted items, and payment selection', async () => {
@@ -204,7 +243,6 @@ describe('Checkout flow', () => {
       total: 35,
       clearCart,
     });
-    createOrderMock.mockResolvedValue({ orderId: 'ORD-456' });
 
     render(
       <MemoryRouter>
@@ -226,14 +264,12 @@ describe('Checkout flow', () => {
     fireEvent.click(screen.getByRole('button', { name: /place order/i }));
 
     await waitFor(() =>
-      expect(createOrderMock).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/orders/razorpay/verify'),
         expect.objectContaining({
-          items: [{ productId: 'p1', weight: '500g', quantity: 1 }],
-          address: expect.objectContaining({ address2: 'Near Park' }),
-          paymentMethod: 'upi',
+          body: expect.stringContaining('"address2":"Near Park"')
         }),
       ),
     );
   });
 });
-

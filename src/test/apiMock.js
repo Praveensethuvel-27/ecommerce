@@ -42,5 +42,6 @@ export function createApiMock() {
     })),
     login: vi.fn(),
     register: vi.fn(),
+    getActiveOffers: vi.fn(async () => []),
   };
 }
